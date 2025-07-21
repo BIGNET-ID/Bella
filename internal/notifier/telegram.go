@@ -53,28 +53,12 @@ func (t *telegramNotifier) SendSatnetAlert(gatewayName string, degradedSatnets [
 
 	friendlyGatewayName := t.determineFriendlyGatewayName(degradedSatnets[0].Name)
 
-	alertTitle := fmt.Sprintf("🚨 CRITICAL ALERT: %d SATNETS DOWN 🚨", len(degradedSatnets))
-	gatewayLine := fmt.Sprintf("GATEWAY: %s", friendlyGatewayName)
+	alertTitle := fmt.Sprintf("🚨 *CRITICAL ALERT: %d SATNETS DOWN* 🚨", len(degradedSatnets))
+	gatewayLine := fmt.Sprintf("🔰 *GATEWAY: %s*", friendlyGatewayName)
 
-	const totalWidth = 44
-
-	createCenteredLine := func(text string) string {
-		textLen := utf8.RuneCountInString(text)
-		if textLen >= totalWidth {
-			return text
-		}
-		paddingSize := (totalWidth - textLen) / 2
-		padding := strings.Repeat(" ", paddingSize)
-		return padding + text
-	}
-
-	centeredAlertTitle := createCenteredLine(alertTitle)
-	centeredGatewayLine := createCenteredLine(gatewayLine)
-
-	// 5. Bangun header
-	header := fmt.Sprintf("`%s`\n`%s`\n%s\n\n",
-		centeredAlertTitle,
-		centeredGatewayLine,
+	header := fmt.Sprintf("%s\n%s\n%s\n\n",
+		alertTitle,
+		gatewayLine,
 		escapeMarkdownV2("────────────────────────────────"),
 	)
 	messageBuilder.WriteString(header)
