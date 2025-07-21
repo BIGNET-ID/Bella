@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 type Notifier interface {
@@ -39,7 +40,6 @@ func (t *telegramNotifier) determineFriendlyGatewayName(satnetName string) strin
 	if strings.HasPrefix(upperSatnetName, "T") || strings.HasPrefix(upperSatnetName, "TMKN") {
 		return "TIMIKA"
 	}
-	// Fallback jika tidak ada yang cocok
 	return "GATEWAY TIDAK DIKENALI"
 }
 
@@ -51,12 +51,30 @@ func (t *telegramNotifier) SendSatnetAlert(gatewayName string, degradedSatnets [
 	var messageBuilder strings.Builder
 	detectionTime := time.Now().Format("2006-01-02 15:04:05 WIB")
 
-
 	friendlyGatewayName := t.determineFriendlyGatewayName(degradedSatnets[0].Name)
 
-	header := fmt.Sprintf("🚨 *CRITICAL ALERT: %d SATNETS DOWN* 🚨\n *GATEWAY:* %s\n%s\n\n",
-		len(degradedSatnets),
-		escapeMarkdownV2(friendlyGatewayName),
+	alertTitle := fmt.Sprintf("🚨 CRITICAL ALERT: %d SATNETS DOWN 🚨", len(degradedSatnets))
+	gatewayLine := fmt.Sprintf("GATEWAY: %s", friendlyGatewayName)
+
+	const totalWidth = 44
+
+	createCenteredLine := func(text string) string {
+		textLen := utf8.RuneCountInString(text)
+		if textLen >= totalWidth {
+			return text
+		}
+		paddingSize := (totalWidth - textLen) / 2
+		padding := strings.Repeat(" ", paddingSize)
+		return padding + text
+	}
+
+	centeredAlertTitle := createCenteredLine(alertTitle)
+	centeredGatewayLine := createCenteredLine(gatewayLine)
+
+	// 5. Bangun header
+	header := fmt.Sprintf("`%s`\n`%s`\n%s\n\n",
+		centeredAlertTitle,
+		centeredGatewayLine,
 		escapeMarkdownV2("────────────────────────────────"),
 	)
 	messageBuilder.WriteString(header)
@@ -115,4 +133,21 @@ func (t *telegramNotifier) sendMessage(text string) error {
 func escapeMarkdownV2(text string) string {
 	replacer := strings.NewReplacer("_", "\\_", "*", "\\*", "[", "\\[", "]", "\\]", "(", "\\(", ")", "\\)", "~", "\\~", "`", "\\`", ">", "\\>", "#", "\\#", "+", "\\+", "-", "\\-", "=", "\\=", "|", "\\|", "{", "\\{", "}", "\\}", ".", "\\.", "!", "\\!")
 	return replacer.Replace(text)
+}
+
+func centerText(text string, width int) string {
+	textLen := utf8.RuneCountInString(text)
+
+	if strings.Contains(text, "🚨") {
+		textLen += strings.Count(text, "🚨")
+	}
+
+	if textLen >= width {
+		return text
+	}
+	padding := (width - textLen) / 2
+	if padding < 0 {
+		padding = 0
+	}
+	return strings.Repeat(" ", padding) + text
 }
