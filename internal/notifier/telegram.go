@@ -1,23 +1,18 @@
 package notifier
 
 import (
+	"bella/internal/types"
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"strings"
 	"time"
-	"unicode/utf8"
 )
 
 type Notifier interface {
-	SendSatnetAlert(gatewayName string, degradedSatnets []DegradedSatnetInfo) error
-}
-
-type DegradedSatnetInfo struct {
-	Name string
-	Fwd  string
-	Rtn  string
+	SendSatnetAlert(report types.GatewayReport) error
 }
 
 type telegramNotifier struct {
@@ -29,56 +24,63 @@ func NewTelegramNotifier(token, chatID string) Notifier {
 	return &telegramNotifier{botToken: token, chatID: chatID}
 }
 
-func (t *telegramNotifier) determineFriendlyGatewayName(satnetName string) string {
-	upperSatnetName := strings.ToUpper(satnetName)
-	if strings.HasPrefix(upperSatnetName, "J") || strings.HasPrefix(upperSatnetName, "JYPN") {
-		return "JAYAPURA"
-	}
-	if strings.HasPrefix(upperSatnetName, "M") || strings.HasPrefix(upperSatnetName, "MNKN") {
-		return "MANOKWARI"
-	}
-	if strings.HasPrefix(upperSatnetName, "T") || strings.HasPrefix(upperSatnetName, "TMKN") {
-		return "TIMIKA"
-	}
-	return "GATEWAY TIDAK DIKENALI"
-}
-
-func (t *telegramNotifier) SendSatnetAlert(gatewayName string, degradedSatnets []DegradedSatnetInfo) error {
-	if len(degradedSatnets) == 0 {
+func (t *telegramNotifier) SendSatnetAlert(report types.GatewayReport) error {
+	if len(report.Satnets) == 0 {
 		return nil
 	}
 
 	var messageBuilder strings.Builder
-	detectionTime := time.Now().Format("2006-01-02 15:04:05 WIB")
+	friendlyGatewayName := t.determineFriendlyGatewayName(report.FriendlyName)
 
-	friendlyGatewayName := t.determineFriendlyGatewayName(degradedSatnets[0].Name)
-
-	alertTitle := fmt.Sprintf("🚨 *CRITICAL ALERT: %d SATNETS DOWN* 🚨", len(degradedSatnets))
-	gatewayLine := fmt.Sprintf("🔰 *GATEWAY: %s*", friendlyGatewayName)
-
-	header := fmt.Sprintf("%s\n%s\n%s\n\n",
-		alertTitle,
-		gatewayLine,
-		escapeMarkdownV2("────────────────────────────────"),
-	)
+	alertTitle := fmt.Sprintf("🚨 *CRITICAL ALERT: %d SATNETS DOWN* 🚨", len(report.Satnets))
+	gatewayLine := fmt.Sprintf("🔴 *GATEWAY: %s*", escapeMarkdownV2(friendlyGatewayName))
+	header := fmt.Sprintf("%s\n%s\n%s\n\n", alertTitle, gatewayLine, escapeMarkdownV2("────────────────────────────────"))
 	messageBuilder.WriteString(header)
 
-	for _, alarm := range degradedSatnets {
+	var latestTime time.Time
+
+	for _, satnet := range report.Satnets {
+		onlineStr := "\\-" // Default: strip
+		if satnet.OnlineCount != nil {
+			onlineStr = fmt.Sprintf("%d", *satnet.OnlineCount)
+		}
+
+		offlineStr := "\\-" // Default: strip
+		if satnet.OfflineCount != nil {
+			offlineStr = fmt.Sprintf("%d", *satnet.OfflineCount)
+		}
+
+		fwdStr := escapeMarkdownV2(fmt.Sprintf("%.2f", satnet.FwdTp))
+		rtnStr := escapeMarkdownV2(fmt.Sprintf("%.2f", satnet.RtnTp))
+
 		satnetInfo := fmt.Sprintf(
 			"🔻 *SATNET:* %s\n"+
 				"   ├─ *Fwd:* %s kbps `(LOW)`\n"+
-				"   └─ *Rtn:* %s kbps\n\n",
-			escapeMarkdownV2(alarm.Name),
-			escapeMarkdownV2(alarm.Fwd),
-			escapeMarkdownV2(alarm.Rtn),
+				"   ├─ *Rtn:* %s kbps\n"+
+				"   ├─ *Online:* %s\n"+
+				"   └─ *Offline:* %s\n\n",
+			escapeMarkdownV2(satnet.Name),
+			fwdStr,
+			rtnStr,
+			onlineStr,
+			offlineStr,
 		)
 		messageBuilder.WriteString(satnetInfo)
+
+		parsedTime, err := time.Parse(time.RFC3339, satnet.Time)
+		if err == nil && parsedTime.After(latestTime) {
+			latestTime = parsedTime
+		}
 	}
 
-	tagLine := "👥 *CC:* @legor1 @legor2 \\(mohon perhatiannya\\)"
+	detectionTimeStr := "N/A"
+	if !latestTime.IsZero() {
+		detectionTimeStr = latestTime.Format("2006-01-02 15:04:05 WIB")
+	}
 
+	tagLine := "👥 *CC:* @x @x \\(mohon perhatiannya\\)"
 	footer := fmt.Sprintf("🕒 *Time of Detection:* %s\n\n%s\n\n*ACTION:* Immediate investigation required\\.",
-		escapeMarkdownV2(detectionTime),
+		escapeMarkdownV2(detectionTimeStr),
 		tagLine,
 	)
 	messageBuilder.WriteString(footer)
@@ -86,31 +88,29 @@ func (t *telegramNotifier) SendSatnetAlert(gatewayName string, degradedSatnets [
 	return t.sendMessage(messageBuilder.String())
 }
 
-// sendMessage adalah helper privat untuk mengirim request ke API Telegram.
 func (t *telegramNotifier) sendMessage(text string) error {
 	payload := map[string]string{
 		"chat_id":    t.chatID,
 		"text":       text,
 		"parse_mode": "MarkdownV2",
 	}
-
 	payloadBytes, err := json.Marshal(payload)
 	if err != nil {
 		return fmt.Errorf("error marshalling payload: %w", err)
 	}
-
 	url := fmt.Sprintf("https://api.telegram.org/bot%s/sendMessage", t.botToken)
 	resp, err := http.Post(url, "application/json", bytes.NewBuffer(payloadBytes))
 	if err != nil {
 		return fmt.Errorf("error sending message: %w", err)
 	}
 	defer resp.Body.Close()
-
 	if resp.StatusCode != http.StatusOK {
 		var body bytes.Buffer
 		body.ReadFrom(resp.Body)
+		log.Printf("❌ [NOTIFIER] Gagal mengirim ke Telegram! Status: %d, Pesan: %s", resp.StatusCode, body.String())
 		return fmt.Errorf("telegram API Error: %s (status: %d)", body.String(), resp.StatusCode)
 	}
+	log.Println("✅ [NOTIFIER] Pesan berhasil dikirim ke Telegram.")
 	return nil
 }
 
@@ -119,19 +119,16 @@ func escapeMarkdownV2(text string) string {
 	return replacer.Replace(text)
 }
 
-func centerText(text string, width int) string {
-	textLen := utf8.RuneCountInString(text)
-
-	if strings.Contains(text, "🚨") {
-		textLen += strings.Count(text, "🚨")
+func (t *telegramNotifier) determineFriendlyGatewayName(gatewayName string) string {
+	upperName := strings.ToUpper(gatewayName)
+	if strings.Contains(upperName, "JYP") {
+		return "JAYAPURA"
 	}
-
-	if textLen >= width {
-		return text
+	if strings.Contains(upperName, "MNK") {
+		return "MANOKWARI"
 	}
-	padding := (width - textLen) / 2
-	if padding < 0 {
-		padding = 0
+	if strings.Contains(upperName, "TMK") {
+		return "TIMIKA"
 	}
-	return strings.Repeat(" ", padding) + text
+	return gatewayName
 }
