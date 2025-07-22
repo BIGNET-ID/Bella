@@ -1,0 +1,24 @@
+Langkah A (Pikiran Agent): 
+"Oke, untuk membuat laporan, saya perlu data dari setiap gateway. Saya akan mulai dengan Jayapura. Saya butuh daftar satnet yang jelek. Saya akan gunakan tool get_degraded_satnets dengan input gateway_name: 'DB_ONE_JYP'."
+
+Framework Agent memanggil fungsi Go get_degraded_satnets("DB_ONE_JYP").
+
+Langkah B (Pikiran Agent): 
+"Bagus, saya dapat hasilnya: [TMKN1-B093-SN11, TMKN1-B093-SN12]. Sekarang, untuk setiap satnet ini, saya perlu tahu status terminalnya. Saya akan gunakan tool get_terminal_status."
+
+Framework Agent memanggil get_terminal_status("TMKN1-B093-SN11"). Hasilnya: {online_count: 15, offline_count: 3}.
+
+Framework Agent memanggil get_terminal_status("TMKN1-B093-SN12"). Hasilnya: {online_count: 20, offline_count: 1}.
+
+Langkah C (Pikiran Agent): 
+"Oke, data untuk Jayapura sudah lengkap. Sekarang saya ulangi proses yang sama untuk Manokwari dan Timika."
+
+(Proses berulang untuk gateway lain)
+
+Langkah D (Pikiran Agent): 
+"Semua data sudah terkumpul. Sekarang saya akan menyusun (compose) sebuah pesan yang bagus dan informatif dalam format Markdown berdasarkan semua data yang saya miliki."
+
+Langkah E (Pikiran Agent): 
+"Pesan sudah jadi. Sekarang saya akan mengirimnya. Saya akan gunakan tool send_telegram_alert dengan input pesan yang baru saja saya susun."
+
+Framework Agent memanggil send_telegram_alert(pesan_yang_disusun)

@@ -1,25 +1,22 @@
 package notifier
 
 import (
+	"bella/internal/types"
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"strings"
 	"time"
-	"unicode/utf8"
 )
 
+// Notifier adalah interface umum untuk pengirim notifikasi.
 type Notifier interface {
-	SendSatnetAlert(gatewayName string, degradedSatnets []DegradedSatnetInfo) error
+	FormatAndSendAgentReport(report types.GatewayReport) error
 }
 
-type DegradedSatnetInfo struct {
-	Name string
-	Fwd  string
-	Rtn  string
-}
-
+// telegramNotifier adalah implementasi konkret untuk Telegram.
 type telegramNotifier struct {
 	botToken string
 	chatID   string
@@ -29,61 +26,71 @@ func NewTelegramNotifier(token, chatID string) Notifier {
 	return &telegramNotifier{botToken: token, chatID: chatID}
 }
 
-func (t *telegramNotifier) determineFriendlyGatewayName(satnetName string) string {
-	upperSatnetName := strings.ToUpper(satnetName)
-	if strings.HasPrefix(upperSatnetName, "J") || strings.HasPrefix(upperSatnetName, "JYPN") {
-		return "JAYAPURA"
-	}
-	if strings.HasPrefix(upperSatnetName, "M") || strings.HasPrefix(upperSatnetName, "MNKN") {
-		return "MANOKWARI"
-	}
-	if strings.HasPrefix(upperSatnetName, "T") || strings.HasPrefix(upperSatnetName, "TMKN") {
-		return "TIMIKA"
-	}
-	return "GATEWAY TIDAK DIKENALI"
-}
+// FormatAndSendAgentReport mengambil data terstruktur, memformatnya, dan mengirimkannya.
+func (t *telegramNotifier) FormatAndSendAgentReport(report types.GatewayReport) error {
+	log.Printf("✅ [NOTIFIER] Memulai format laporan untuk Gateway: %s", report.FriendlyName)
 
-func (t *telegramNotifier) SendSatnetAlert(gatewayName string, degradedSatnets []DegradedSatnetInfo) error {
-	if len(degradedSatnets) == 0 {
+	if len(report.Satnets) == 0 {
+		log.Printf("🟡 [NOTIFIER] Tidak ada satnet bermasalah untuk dilaporkan di %s. Melewati.", report.FriendlyName)
 		return nil
 	}
 
-	var messageBuilder strings.Builder
-	detectionTime := time.Now().Format("2006-01-02 15:04:05 WIB")
+	var finalReport strings.Builder
 
-	friendlyGatewayName := t.determineFriendlyGatewayName(degradedSatnets[0].Name)
+	// Tentukan nama gateway yang ramah
+	friendlyName := t.determineFriendlyGatewayName(report.FriendlyName)
 
-	alertTitle := fmt.Sprintf("🚨 *CRITICAL ALERT: %d SATNETS DOWN* 🚨", len(degradedSatnets))
-	gatewayLine := fmt.Sprintf("🔰 *GATEWAY: %s*", friendlyGatewayName)
+	// Header
+	finalReport.WriteString(fmt.Sprintf("🚨 *CRITICAL ALERT: %d SATNETS DOWN* 🚨\n", len(report.Satnets)))
+	finalReport.WriteString(fmt.Sprintf("🔴 *GATEWAY: %s*\n", escapeMarkdownV2(friendlyName)))
+	finalReport.WriteString(escapeMarkdownV2("────────────────────────────────") + "\n\n")
 
-	header := fmt.Sprintf("%s\n%s\n%s\n\n",
-		alertTitle,
-		gatewayLine,
-		escapeMarkdownV2("────────────────────────────────"),
-	)
-	messageBuilder.WriteString(header)
+	// Detail Satnet
+	for _, satnet := range report.Satnets {
+		var onlineStr, offlineStr string
 
-	for _, alarm := range degradedSatnets {
-		satnetInfo := fmt.Sprintf(
-			"🔻 *SATNET:* %s\n"+
-				"   ├─ *Fwd:* %s kbps `(LOW)`\n"+
-				"   └─ *Rtn:* %s kbps\n\n",
-			escapeMarkdownV2(alarm.Name),
-			escapeMarkdownV2(alarm.Fwd),
-			escapeMarkdownV2(alarm.Rtn),
-		)
-		messageBuilder.WriteString(satnetInfo)
+		// **PERBAIKAN LOGIKA**: Cek jika pointer nil ATAU nilainya -1.
+		if satnet.OnlineCount == nil || *satnet.OnlineCount == -1 {
+			onlineStr = "\\-"
+		} else {
+			onlineStr = fmt.Sprintf("%d", *satnet.OnlineCount)
+		}
+
+		if satnet.OfflineCount == nil || *satnet.OfflineCount == -1 {
+			offlineStr = "\\-"
+		} else {
+			offlineStr = fmt.Sprintf("%d", *satnet.OfflineCount)
+		}
+		
+		fwdStr := escapeMarkdownV2(fmt.Sprintf("%.2f", satnet.FwdTp))
+		rtnStr := escapeMarkdownV2(fmt.Sprintf("%.2f", satnet.RtnTp))
+		satnetNameStr := escapeMarkdownV2(satnet.Name)
+
+		finalReport.WriteString(fmt.Sprintf("🔻 *SATNET:* %s\n", satnetNameStr))
+		finalReport.WriteString(fmt.Sprintf("   ├─ *Fwd:* %s kbps `(LOW)`\n", fwdStr))
+		finalReport.WriteString(fmt.Sprintf("   ├─ *Rtn:* %s kbps\n", rtnStr))
+		finalReport.WriteString(fmt.Sprintf("   ├─ *Online:* %s\n", onlineStr))
+		finalReport.WriteString(fmt.Sprintf("   └─ *Offline:* %s\n\n", offlineStr))
 	}
 
-	tagLine := "👥 *CC:* @legor1 @legor2 \\(mohon perhatiannya\\)"
+	// Footer
+	detectionTime := time.Now().Format("2006-01-02 15:04:05 MST")
+	if len(report.Satnets) > 0 && report.Satnets[0].Time != "" {
+		parsedTime, err := time.Parse(time.RFC3339, report.Satnets[0].Time)
+		if err == nil {
+			detectionTime = parsedTime.Format("2006-01-02 15:04:05 MST")
+		}
+	}
 
+	tagLine := "👥 *CC:* @x @x \\(mohon perhatiannya\\)"
 	footer := fmt.Sprintf("🕒 *Time of Detection:* %s\n\n%s\n\n*ACTION:* Immediate investigation required\\.",
 		escapeMarkdownV2(detectionTime),
 		tagLine,
 	)
-	messageBuilder.WriteString(footer)
+	finalReport.WriteString(footer)
 
-	return t.sendMessage(messageBuilder.String())
+	log.Printf("📤 [NOTIFIER] Laporan untuk %s sudah diformat, mencoba mengirim...", report.FriendlyName)
+	return t.sendMessage(finalReport.String())
 }
 
 // sendMessage adalah helper privat untuk mengirim request ke API Telegram.
@@ -109,29 +116,33 @@ func (t *telegramNotifier) sendMessage(text string) error {
 	if resp.StatusCode != http.StatusOK {
 		var body bytes.Buffer
 		body.ReadFrom(resp.Body)
+		log.Printf("❌ [NOTIFIER] Gagal mengirim ke Telegram! Status: %d, Pesan: %s", resp.StatusCode, body.String())
 		return fmt.Errorf("telegram API Error: %s (status: %d)", body.String(), resp.StatusCode)
 	}
+
+	log.Println("✅ [NOTIFIER] Pesan berhasil dikirim ke Telegram.")
 	return nil
 }
 
 func escapeMarkdownV2(text string) string {
-	replacer := strings.NewReplacer("_", "\\_", "*", "\\*", "[", "\\[", "]", "\\]", "(", "\\(", ")", "\\)", "~", "\\~", "`", "\\`", ">", "\\>", "#", "\\#", "+", "\\+", "-", "\\-", "=", "\\=", "|", "\\|", "{", "\\{", "}", "\\}", ".", "\\.", "!", "\\!")
+	replacer := strings.NewReplacer(
+		"_", "\\_", "*", "\\*", "[", "\\[", "]", "\\]", "(", "\\(", ")", "\\)",
+		"~", "\\~", "`", "\\`", ">", "\\>", "#", "\\#", "+", "\\+", "-", "\\-",
+		"=", "\\=", "|", "\\|", "{", "\\{", "}", "\\}", ".", "\\.", "!", "\\!",
+	)
 	return replacer.Replace(text)
 }
 
-func centerText(text string, width int) string {
-	textLen := utf8.RuneCountInString(text)
-
-	if strings.Contains(text, "🚨") {
-		textLen += strings.Count(text, "🚨")
+// determineFriendlyGatewayName menerjemahkan nama teknis menjadi nama yang mudah dibaca.
+func (t *telegramNotifier) determineFriendlyGatewayName(gatewayName string) string {
+	if strings.Contains(gatewayName, "JYP") {
+		return "JAYAPURA"
 	}
-
-	if textLen >= width {
-		return text
+	if strings.Contains(gatewayName, "MNK") {
+		return "MANOKWARI"
 	}
-	padding := (width - textLen) / 2
-	if padding < 0 {
-		padding = 0
+	if strings.Contains(gatewayName, "TMK") {
+		return "TIMIKA"
 	}
-	return strings.Repeat(" ", padding) + text
+	return gatewayName // Fallback
 }

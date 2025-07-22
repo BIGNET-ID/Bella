@@ -18,6 +18,7 @@ type AppConfig struct {
 	TelegramToken  string
 	TelegramChatID string
 	CronSchedule   string
+	OpenAIApiKey   string
 }
 
 type DatabaseConfig struct {
@@ -38,6 +39,7 @@ func LoadConfig() *AppConfig {
 		TelegramToken:  getEnv("TELEGRAM_BELLA_TOKEN"),
 		TelegramChatID: getEnv("TELEGRAM_BELLA_GROUP_ID"),
 		CronSchedule:   getEnv("CRON_SCHEDULE"),
+		OpenAIApiKey:   getEnv("OPENAI_API_KEY"),
 	}
 
 	cfg.DBOneJYP = loadDBConfig("DB_ONE_JYP")
