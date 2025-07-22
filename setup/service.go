@@ -1,47 +1,54 @@
 package setup
 
 import (
-	"log"
-	"strings" // <-- Import paket strings
-	"bella/config"
+	config "bella/config"
 	"bella/db"
 	"bella/internal/notifier"
 	"bella/internal/satnet"
+	"log"
 
 	"github.com/robfig/cron/v3"
 	"gorm.io/gorm"
 )
 
-// RegisterServicesAndTasks menginisialisasi semua service dan mendaftarkan tugas terjadwal.
+// Map untuk menghubungkan nama gateway DB_ONE ke koneksi DB_FIVE-nya.
+var dbFiveMap = map[string]*gorm.DB{}
+
 func RegisterServicesAndTasks(
 	allConnections *db.Connections,
 	notifier notifier.Notifier,
 	scheduler *cron.Cron,
-	config *configs.AppConfig,
+	config *config.AppConfig,
 ) {
 	log.Println("Mendaftarkan service dan tugas terjadwal...")
 
-	// Helper function untuk mendaftarkan service
-	register := func(dbConn *gorm.DB, name string) {
-		if dbConn == nil {
-			return // Lewati jika koneksi tidak aktif
+	// Inisialisasi map
+	dbFiveMap["DB_ONE_JYP"] = allConnections.DBFiveJYP
+	dbFiveMap["DB_ONE_MNK"] = allConnections.DBFiveMNK
+	dbFiveMap["DB_ONE_TMK"] = allConnections.DBFiveTMK
+
+	// Helper untuk mendaftarkan tugas per gateway
+	register := func(dbOneName string, dbOneConn *gorm.DB) {
+		if dbOneConn == nil {
+			log.Printf("Koneksi untuk %s tidak aktif, tugas dilewati.", dbOneName)
+			return
 		}
 
-		if strings.HasPrefix(name, "DB_ONE") {
-			// Buat service untuk fitur satnet
-			satnetSvc := satnet.NewService(dbConn, notifier, name)
-			scheduler.AddFunc(config.CronSchedule, satnetSvc.CheckAndAlert)
-			log.Printf("Service Satnet untuk '%s' berhasil didaftarkan.", name)
+		// Cari koneksi DB_FIVE yang sesuai
+		dbFiveConn, ok := dbFiveMap[dbOneName]
+		if !ok || dbFiveConn == nil {
+			log.Printf("PERINGATAN: Koneksi DB_FIVE untuk %s tidak ditemukan/aktif. Tugas tidak akan menyertakan status terminal.", dbOneName)
+			return // Lewati pendaftaran jika DB_FIVE tidak ada
 		}
 
-		log.Printf("Inisialisasi dasar untuk '%s' selesai.", name)
+		// Buat service dengan koneksi DB_FIVE
+		satnetSvc := satnet.NewService(dbFiveConn, notifier, dbOneName)
+		scheduler.AddFunc(config.CronSchedule, satnetSvc.CheckAndAlert)
+		log.Printf("Service Satnet (dengan status terminal) untuk '%s' berhasil didaftarkan.", dbOneName)
 	}
 
-	// Panggil helper untuk setiap koneksi
-	register(allConnections.DBOneJYP, "DB_ONE_JYP")
-	register(allConnections.DBOneMNK, "DB_ONE_MNK")
-	register(allConnections.DBOneTMK, "DB_ONE_TMK")
-	register(allConnections.DBFiveJYP, "DB_FIVE_JYP")
-	register(allConnections.DBFiveMNK, "DB_FIVE_MNK")
-	register(allConnections.DBFiveTMK, "DB_FIVE_TMK")
+	// Daftarkan tugas untuk setiap gateway
+	register("DB_ONE_JYP", allConnections.DBOneJYP)
+	register("DB_ONE_MNK", allConnections.DBOneMNK)
+	register("DB_ONE_TMK", allConnections.DBOneTMK)
 }
