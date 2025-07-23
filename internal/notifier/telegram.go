@@ -11,12 +11,10 @@ import (
 	"time"
 )
 
-// Notifier adalah interface umum untuk pengirim notifikasi.
 type Notifier interface {
 	FormatAndSendAgentReport(report types.GatewayReport) error
 }
 
-// telegramNotifier adalah implementasi konkret untuk Telegram.
 type telegramNotifier struct {
 	botToken string
 	chatID   string
@@ -26,7 +24,6 @@ func NewTelegramNotifier(token, chatID string) Notifier {
 	return &telegramNotifier{botToken: token, chatID: chatID}
 }
 
-// FormatAndSendAgentReport mengambil data terstruktur, memformatnya, dan mengirimkannya.
 func (t *telegramNotifier) FormatAndSendAgentReport(report types.GatewayReport) error {
 	log.Printf("✅ [NOTIFIER] Memulai format laporan untuk Gateway: %s", report.FriendlyName)
 
@@ -37,15 +34,12 @@ func (t *telegramNotifier) FormatAndSendAgentReport(report types.GatewayReport) 
 
 	var finalReport strings.Builder
 
-	// Tentukan nama gateway yang ramah
 	friendlyName := t.determineFriendlyGatewayName(report.FriendlyName)
 
-	// Header
 	finalReport.WriteString(fmt.Sprintf("🚨 *CRITICAL ALERT: %d SATNETS DOWN* 🚨\n", len(report.Satnets)))
 	finalReport.WriteString(fmt.Sprintf("🔴 *GATEWAY: %s*\n", escapeMarkdownV2(friendlyName)))
 	finalReport.WriteString(escapeMarkdownV2("────────────────────────────────") + "\n\n")
 
-	// Detail Satnet
 	for _, satnet := range report.Satnets {
 		var onlineStr, offlineStr string
 
@@ -61,7 +55,7 @@ func (t *telegramNotifier) FormatAndSendAgentReport(report types.GatewayReport) 
 		} else {
 			offlineStr = fmt.Sprintf("%d", *satnet.OfflineCount)
 		}
-		
+
 		fwdStr := escapeMarkdownV2(fmt.Sprintf("%.2f", satnet.FwdTp))
 		rtnStr := escapeMarkdownV2(fmt.Sprintf("%.2f", satnet.RtnTp))
 		satnetNameStr := escapeMarkdownV2(satnet.Name)
@@ -73,7 +67,6 @@ func (t *telegramNotifier) FormatAndSendAgentReport(report types.GatewayReport) 
 		finalReport.WriteString(fmt.Sprintf("   └─ *Offline:* %s\n\n", offlineStr))
 	}
 
-	// Footer
 	detectionTime := time.Now().Format("2006-01-02 15:04:05 MST")
 	if len(report.Satnets) > 0 && report.Satnets[0].Time != "" {
 		parsedTime, err := time.Parse(time.RFC3339, report.Satnets[0].Time)
@@ -93,7 +86,6 @@ func (t *telegramNotifier) FormatAndSendAgentReport(report types.GatewayReport) 
 	return t.sendMessage(finalReport.String())
 }
 
-// sendMessage adalah helper privat untuk mengirim request ke API Telegram.
 func (t *telegramNotifier) sendMessage(text string) error {
 	payload := map[string]string{
 		"chat_id":    t.chatID,
@@ -133,7 +125,6 @@ func escapeMarkdownV2(text string) string {
 	return replacer.Replace(text)
 }
 
-// determineFriendlyGatewayName menerjemahkan nama teknis menjadi nama yang mudah dibaca.
 func (t *telegramNotifier) determineFriendlyGatewayName(gatewayName string) string {
 	if strings.Contains(gatewayName, "JYP") {
 		return "JAYAPURA"
@@ -144,5 +135,5 @@ func (t *telegramNotifier) determineFriendlyGatewayName(gatewayName string) stri
 	if strings.Contains(gatewayName, "TMK") {
 		return "TIMIKA"
 	}
-	return gatewayName // Fallback
+	return gatewayName
 }

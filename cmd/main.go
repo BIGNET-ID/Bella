@@ -16,17 +16,13 @@ import (
 func main() {
 	log.Println("Memulai Bella Alert System (Agent SDK Mode)...")
 
-	// 1. Inisialisasi komponen dasar
 	config := config.LoadConfig()
 	allConnections := db.InitializeDatabases(config)
-	// PERBAIKAN: Mengirim token dan chat ID secara eksplisit
 	telegramNotifier := notifier.NewTelegramNotifier(config.TelegramToken, config.TelegramChatID)
 	scheduler := cron.New()
 
-	// 2. Panggil satu fungsi untuk mendaftarkan Agent
 	setup.RegisterAgentTasks(allConnections, telegramNotifier, scheduler, config)
 	
-	// 3. Jalankan Scheduler dan tunggu sinyal shutdown
 	if len(scheduler.Entries()) > 0 {
 		scheduler.Start()
 		log.Printf("Scheduler berjalan dengan %d tugas.", len(scheduler.Entries()))

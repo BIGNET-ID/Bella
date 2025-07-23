@@ -11,18 +11,15 @@ import (
 	"gorm.io/gorm"
 )
 
-// Toolset adalah struct yang memegang dependensi untuk semua tools.
 type Toolset struct {
 	dbConnections *db.Connections
 	notifier      notifier.Notifier
 }
 
-// NewToolset adalah constructor untuk membuat kotak perkakas baru.
 func NewToolset(conns *db.Connections, notifier notifier.Notifier) *Toolset {
 	return &Toolset{dbConnections: conns, notifier: notifier}
 }
 
-// GetDegradedSatnetsTool membuat tool untuk mengambil data satnet dari DB_ONE.
 func (ts *Toolset) GetDegradedSatnetsTool() *tool.FunctionTool {
 	return tool.NewFunctionTool(
 		"get_degraded_satnets",
@@ -56,7 +53,6 @@ func (ts *Toolset) GetDegradedSatnetsTool() *tool.FunctionTool {
 				Time  time.Time `json:"time"`
 			}
 			var results []SatnetResult
-			// Mengambil data terakhir dari setiap satnet
 			err := db.Raw(`
 				SELECT DISTINCT ON (satnet_name)
 					satnet_name as name,
@@ -70,7 +66,6 @@ func (ts *Toolset) GetDegradedSatnetsTool() *tool.FunctionTool {
 				return nil, err
 			}
 
-			// Filter hanya yang di bawah threshold
 			var degradedResults []SatnetResult
 			for _, r := range results {
 				if r.FwdTp < 1000.0 {
@@ -91,7 +86,6 @@ func (ts *Toolset) GetDegradedSatnetsTool() *tool.FunctionTool {
 	})
 }
 
-// GetTerminalStatusTool membuat tool untuk menghitung status terminal dari DB_FIVE.
 func (ts *Toolset) GetTerminalStatusTool() *tool.FunctionTool {
 	return tool.NewFunctionTool(
 		"get_terminal_status",
@@ -101,7 +95,6 @@ func (ts *Toolset) GetTerminalStatusTool() *tool.FunctionTool {
 			satnetName, _ := params["satnet_name"].(string)
 
 			var db5 *gorm.DB
-			// Logika untuk memetakan DB_ONE ke DB_FIVE
 			switch gatewayName {
 			case "DB_ONE_JYP":
 				db5 = ts.dbConnections.DBFiveJYP
@@ -118,7 +111,6 @@ func (ts *Toolset) GetTerminalStatusTool() *tool.FunctionTool {
 			}
 
 			// **PERBAIKAN LOGIKA DIMULAI DI SINI**
-			// Langkah 1: Cek apakah ada record sama sekali untuk satnet ini.
 			var recordCount int64
 			if err := db5.Table("modem_kpi").Where("satnet = ?", satnetName).Count(&recordCount).Error; err != nil {
 				return nil, fmt.Errorf("gagal melakukan pre-check count untuk satnet %s: %w", satnetName, err)
@@ -128,7 +120,6 @@ func (ts *Toolset) GetTerminalStatusTool() *tool.FunctionTool {
 				return map[string]int64{"online_count": -1, "offline_count": -1}, nil
 			}
 
-			// Langkah 2: Jika data ada, cari timestamp terakhir.
 			var latestTime struct {
 				Time time.Time
 			}
@@ -143,7 +134,6 @@ func (ts *Toolset) GetTerminalStatusTool() *tool.FunctionTool {
 			}
 			var result StatusResult
 
-			// Langkah 3: Hitung online/offline pada timestamp terakhir tersebut.
 			db5.Table("modem_kpi").Where("satnet = ? AND time = ? AND esno_avg > 0", satnetName, latestTime.Time).Count(&result.OnlineCount)
 			db5.Table("modem_kpi").Where("satnet = ? AND time = ? AND (esno_avg <= 0 OR esno_avg IS NULL)", satnetName, latestTime.Time).Count(&result.OfflineCount)
 
