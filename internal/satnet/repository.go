@@ -7,8 +7,6 @@ import (
 	"gorm.io/gorm"
 )
 
-// --- REPOSITORY UNTUK DATA SATNET (DARI DB5, TABEL satnet_kpi) ---
-
 type gormRepository struct {
 	db *gorm.DB
 }
@@ -17,7 +15,6 @@ func NewGormRepository(db *gorm.DB) Repository {
 	return &gormRepository{db: db}
 }
 
-// Model ini sekarang memetakan ke tabel satnet_kpi
 type dbModel struct {
 	SatnetName          string    `gorm:"column:satnet_name"`
 	SatnetFwdThroughput float64   `gorm:"column:satnet_fwd_throughput"`
@@ -27,10 +24,8 @@ type dbModel struct {
 
 func (dbModel) TableName() string { return "satnet_kpi" }
 
-// GetLastSatnetData sekarang mengambil data dari satnet_kpi di DB5
 func (r *gormRepository) GetLastSatnetData() ([]Satnet, error) {
 	var dbResults []dbModel
-	// Query diubah untuk menargetkan tabel dan kolom yang benar
 	sql := `
 		SELECT DISTINCT ON (satnet_name)
 			satnet_name,
@@ -57,10 +52,6 @@ func (r *gormRepository) GetLastSatnetData() ([]Satnet, error) {
 	return results, nil
 }
 
-
-// --- REPOSITORY UNTUK STATUS TERMINAL (DARI DB5, TABEL modem_kpi) ---
-
-// TerminalStatusRepository mendefinisikan metode untuk mendapatkan status terminal.
 type TerminalStatusRepository interface {
 	GetTerminalStatus(satnetName string) (online *int64, offline *int64, err error)
 }
@@ -84,7 +75,7 @@ func (r *gormTerminalStatusRepository) GetTerminalStatus(satnetName string) (*in
 	}
 
 	if recordCount == 0 {
-		return nil, nil, nil // Kembalikan nil jika tidak ada data sama sekali.
+		return nil, nil, nil
 	}
 
 	var latestTime struct{ Time time.Time }

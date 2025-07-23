@@ -40,12 +40,12 @@ func (t *telegramNotifier) SendSatnetAlert(report types.GatewayReport) error {
 	var latestTime time.Time
 
 	for _, satnet := range report.Satnets {
-		onlineStr := "\\-" // Default: strip
+		onlineStr := "\\-"
 		if satnet.OnlineCount != nil {
 			onlineStr = fmt.Sprintf("%d", *satnet.OnlineCount)
 		}
 
-		offlineStr := "\\-" // Default: strip
+		offlineStr := "\\-"
 		if satnet.OfflineCount != nil {
 			offlineStr = fmt.Sprintf("%d", *satnet.OfflineCount)
 		}
