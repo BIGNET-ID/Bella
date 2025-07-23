@@ -27,7 +27,6 @@ type Service struct {
 	name         string
 }
 
-// NewService sekarang menerima koneksi DB_FIVE untuk kedua repository.
 func NewService(dbFive *gorm.DB, notifier notifier.Notifier, name string) *Service {
 	return &Service{
 		repo:         NewGormRepository(dbFive),
@@ -49,7 +48,6 @@ func (s *Service) CheckAndAlert() {
 	var degradedSatnets []types.SatnetDetail
 
 	for _, data := range allData {
-		// Filter satnet yang bermasalah
 		if data.FwdThroughput < thresholdKbps {
 			online, offline, err := s.terminalRepo.GetTerminalStatus(data.Name)
 			if err != nil {
