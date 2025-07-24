@@ -78,7 +78,7 @@ func (t *telegramNotifier) SendSatnetAlert(report types.GatewayReport) error {
 		detectionTimeStr = latestTime.Format("2006-01-02 15:04:05 WIB")
 	}
 
-	tagLine := "👥 *CC:* @x @x \\(mohon perhatiannya\\)"
+	tagLine := "👥 *CC:* @burhanudinus @mardamar99 @DelMelo @sepatubapak \\(mohon perhatiannya\\)"
 	footer := fmt.Sprintf("🕒 *Time of Detection:* %s\n\n%s\n\n*ACTION:* Immediate investigation required\\.",
 		escapeMarkdownV2(detectionTimeStr),
 		tagLine,
