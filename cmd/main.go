@@ -14,7 +14,7 @@ import (
 )
 
 func main() {
-	log.Println("Memulai Bella Alert System (Struktur Final)...")
+	log.Println("Memulai Bella Alert System ...")
 
 	config := configs.LoadConfig()
 	allConnections := db.InitializeDatabases(config)
