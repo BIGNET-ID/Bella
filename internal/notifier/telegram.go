@@ -33,7 +33,7 @@ func (t *telegramNotifier) SendSatnetAlert(report types.GatewayReport) error {
 	friendlyGatewayName := t.determineFriendlyGatewayName(report.FriendlyName)
 
 	alertTitle := fmt.Sprintf("🚨 *CRITICAL ALERT: %d SATNETS DOWN* 🚨", len(report.Satnets))
-	gatewayLine := fmt.Sprintf("🔴 *GATEWAY: %s*", escapeMarkdownV2(friendlyGatewayName))
+	gatewayLine := fmt.Sprintf("🔰 *GATEWAY: %s*", escapeMarkdownV2(friendlyGatewayName))
 	header := fmt.Sprintf("%s\n%s\n%s\n\n", alertTitle, gatewayLine, escapeMarkdownV2("────────────────────────────────"))
 	messageBuilder.WriteString(header)
 
