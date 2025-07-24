@@ -110,7 +110,6 @@ func (ts *Toolset) GetTerminalStatusTool() *tool.FunctionTool {
 				return nil, fmt.Errorf("database DB_FIVE untuk %s tidak aktif", gatewayName)
 			}
 
-			// **PERBAIKAN LOGIKA DIMULAI DI SINI**
 			var recordCount int64
 			if err := db5.Table("modem_kpi").Where("satnet = ?", satnetName).Count(&recordCount).Error; err != nil {
 				return nil, fmt.Errorf("gagal melakukan pre-check count untuk satnet %s: %w", satnetName, err)

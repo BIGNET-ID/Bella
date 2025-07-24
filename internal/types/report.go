@@ -10,6 +10,6 @@ type SatnetDetail struct {
 	FwdTp        float64 `json:"fwd_tp"`
 	RtnTp        float64 `json:"rtn_tp"`
 	Time         string  `json:"time"`
-	OnlineCount  *int64   `json:"online_count"`
-	OfflineCount *int64   `json:"offline_count"`
+	OnlineCount  *int64  `json:"online_count"`
+	OfflineCount *int64  `json:"offline_count"`
 }

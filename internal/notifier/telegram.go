@@ -37,13 +37,12 @@ func (t *telegramNotifier) FormatAndSendAgentReport(report types.GatewayReport) 
 	friendlyName := t.determineFriendlyGatewayName(report.FriendlyName)
 
 	finalReport.WriteString(fmt.Sprintf("🚨 *CRITICAL ALERT: %d SATNETS DOWN* 🚨\n", len(report.Satnets)))
-	finalReport.WriteString(fmt.Sprintf("🔴 *GATEWAY: %s*\n", escapeMarkdownV2(friendlyName)))
+	finalReport.WriteString(fmt.Sprintf("🔰 *GATEWAY: %s*\n", escapeMarkdownV2(friendlyName)))
 	finalReport.WriteString(escapeMarkdownV2("────────────────────────────────") + "\n\n")
 
 	for _, satnet := range report.Satnets {
 		var onlineStr, offlineStr string
 
-		// **PERBAIKAN LOGIKA**: Cek jika pointer nil ATAU nilainya -1.
 		if satnet.OnlineCount == nil || *satnet.OnlineCount == -1 {
 			onlineStr = "\\-"
 		} else {
