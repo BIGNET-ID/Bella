@@ -31,7 +31,7 @@ type DatabaseConfig struct {
 
 func LoadConfig() *AppConfig {
 	if err := godotenv.Load("local.env"); err != nil {
-		log.Fatalf("Error: Tidak dapat memuat file local.env: %v", err)
+		log.Println("Peringatan: Tidak dapat menemukan file local.env, akan menggunakan environment variables yang ada.")
 	}
 
 	cfg := &AppConfig{

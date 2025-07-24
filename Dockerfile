@@ -21,6 +21,4 @@ WORKDIR /app
 
 COPY --from=builder /bella .
 
-COPY local.env .
-
 ENTRYPOINT ["./bella"]
