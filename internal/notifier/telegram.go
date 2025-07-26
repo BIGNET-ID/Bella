@@ -8,7 +8,6 @@ import (
 	"log"
 	"net/http"
 	"strings"
-	"time"
 )
 
 type Notifier interface {
@@ -32,22 +31,31 @@ func (t *telegramNotifier) SendSatnetAlert(report types.GatewayReport) error {
 	var messageBuilder strings.Builder
 	friendlyGatewayName := t.determineFriendlyGatewayName(report.FriendlyName)
 
-	alertTitle := fmt.Sprintf("🚨 *CRITICAL ALERT: %d SATNETS DOWN* 🚨", len(report.Satnets))
-	gatewayLine := fmt.Sprintf("🔰 *GATEWAY: %s*", escapeMarkdownV2(friendlyGatewayName))
-	header := fmt.Sprintf("%s\n%s\n%s\n\n", alertTitle, gatewayLine, escapeMarkdownV2("────────────────────────────────"))
+	alertTitle := "🚨 *CRITICAL ALERT* 🚨"
+	eventLine := fmt.Sprintf("🔴 *EVENT:* %d SATNETS DOWN", len(report.Satnets))
+	gatewayLine := fmt.Sprintf("🔰 *GATEWAY:* %s", escapeMarkdownV2(friendlyGatewayName))
+	header := fmt.Sprintf("%s\n\n%s\n%s\n%s\n\n",
+		alertTitle,
+		eventLine,
+		gatewayLine,
+		escapeMarkdownV2("────────────────────────────────"),
+	)
 	messageBuilder.WriteString(header)
 
-	var latestTime time.Time
-
 	for _, satnet := range report.Satnets {
-		onlineStr := "\\-"
+		onlineStr := "0"
 		if satnet.OnlineCount != nil {
 			onlineStr = fmt.Sprintf("%d", *satnet.OnlineCount)
 		}
 
-		offlineStr := "\\-"
+		offlineStr := "0"
 		if satnet.OfflineCount != nil {
 			offlineStr = fmt.Sprintf("%d", *satnet.OfflineCount)
+		}
+
+		startIssueStr := "N/A"
+		if satnet.StartIssue != nil {
+			startIssueStr = escapeMarkdownV2(satnet.StartIssue.Format("2006-01-02 15:04:05 WIB"))
 		}
 
 		fwdStr := escapeMarkdownV2(fmt.Sprintf("%.2f", satnet.FwdTp))
@@ -55,35 +63,22 @@ func (t *telegramNotifier) SendSatnetAlert(report types.GatewayReport) error {
 
 		satnetInfo := fmt.Sprintf(
 			"🔻 *SATNET:* %s\n"+
-				"   ├─ *Fwd:* %s kbps `(LOW)`\n"+
-				"   ├─ *Rtn:* %s kbps\n"+
-				"   ├─ *Online:* %s\n"+
-				"   └─ *Offline:* %s\n\n",
+				"   ├─ *FWD :* %s kbps `(LOW)`\n"+
+				"   ├─ *RTN :* %s kbps\n"+
+				"   ├─ *Online UT :* %s\n"+
+				"   ├─ *Offline UT :* %s\n"+
+				"   └─ *Start :* %s\n\n",
 			escapeMarkdownV2(satnet.Name),
 			fwdStr,
 			rtnStr,
 			onlineStr,
 			offlineStr,
+			startIssueStr,
 		)
 		messageBuilder.WriteString(satnetInfo)
-
-		parsedTime, err := time.Parse(time.RFC3339, satnet.Time)
-		if err == nil && parsedTime.After(latestTime) {
-			latestTime = parsedTime
-		}
 	}
 
-	detectionTimeStr := "N/A"
-	if !latestTime.IsZero() {
-		detectionTimeStr = latestTime.Format("2006-01-02 15:04:05 WIB")
-	}
-
-
-	tagLine := "👥 *CC:* @burhanudinus @mardamar99 @DelMelo @sepatubapak \\(mohon perhatiannya\\)"
-	footer := fmt.Sprintf("🕒 *Time of Detection:* %s\n\n%s\n\n*ACTION:* Immediate investigation required\\.",
-		escapeMarkdownV2(detectionTimeStr),
-		tagLine,
-	)
+	footer := "*ACTION:* Immediate investigation required\\."
 	messageBuilder.WriteString(footer)
 
 	return t.sendMessage(messageBuilder.String())

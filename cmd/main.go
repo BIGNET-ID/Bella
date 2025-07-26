@@ -19,6 +19,8 @@ func main() {
 	config := configs.LoadConfig()
 
 	allConnections := db.InitializeDatabases(config)
+	
+	defer allConnections.CloseAll()
 
 	telegramNotifier := notifier.NewTelegramNotifier(config.TelegramToken, config.TelegramChatID)
 
@@ -37,7 +39,6 @@ func main() {
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
-
 	log.Println("Menerima sinyal shutdown, menghentikan scheduler...")
 	ctx := scheduler.Stop()
 	<-ctx.Done()

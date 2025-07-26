@@ -60,3 +60,28 @@ func InitializeDatabases(config *configs.AppConfig) *Connections {
 
 	return conns
 }
+
+func (c *Connections) CloseAll() {
+    closeDB := func(db *gorm.DB, name string) {
+        if db == nil {
+            return
+        }
+        sqlDB, err := db.DB()
+        if err != nil {
+            log.Printf("Gagal mendapatkan sql.DB untuk %s: %v", name, err)
+            return
+        }
+        if err := sqlDB.Close(); err != nil {
+            log.Printf("Gagal menutup koneksi %s: %v", name, err)
+        } else {
+            log.Printf("Koneksi ke database '%s' berhasil ditutup.", name)
+        }
+    }
+
+    closeDB(c.DBOneJYP, "DB_ONE_JYP")
+    closeDB(c.DBOneMNK, "DB_ONE_MNK")
+    closeDB(c.DBOneTMK, "DB_ONE_TMK")
+    closeDB(c.DBFiveJYP, "DB_FIVE_JYP")
+    closeDB(c.DBFiveMNK, "DB_FIVE_MNK")
+    closeDB(c.DBFiveTMK, "DB_FIVE_TMK")
+}
