@@ -7,6 +7,12 @@ import (
 	"gorm.io/gorm"
 )
 
+type Repository interface {
+	GetLastSatnetData() ([]Satnet, error)
+	GetStartIssueTime(satnetName string) (*time.Time, error)
+	GetTerminalStatus(satnetName string) (online *int64, offline *int64, err error)
+}
+
 type gormRepository struct {
 	db *gorm.DB
 }
@@ -35,8 +41,7 @@ func (r *gormRepository) GetLastSatnetData() ([]Satnet, error) {
 		FROM satnet_kpi
 		ORDER BY satnet_name, time DESC;
 	`
-	err := r.db.Raw(sql).Scan(&dbResults).Error
-	if err != nil {
+	if err := r.db.Raw(sql).Scan(&dbResults).Error; err != nil {
 		return nil, fmt.Errorf("gagal query satnet_kpi: %w", err)
 	}
 
@@ -52,34 +57,50 @@ func (r *gormRepository) GetLastSatnetData() ([]Satnet, error) {
 	return results, nil
 }
 
-type TerminalStatusRepository interface {
-	GetTerminalStatus(satnetName string) (online *int64, offline *int64, err error)
+func (r *gormRepository) GetStartIssueTime(satnetName string) (*time.Time, error) {
+	var result struct {
+		Time time.Time
+	}
+	sql := `
+		SELECT time FROM satnet_kpi
+		WHERE satnet_name = ? AND satnet_fwd_throughput < 1000
+		AND time >= (
+			SELECT time FROM satnet_kpi
+			WHERE satnet_name = ? AND satnet_fwd_throughput >= 1000
+			ORDER BY time DESC
+			LIMIT 1
+		)
+		ORDER BY time ASC
+		LIMIT 1;
+	`
+	err := r.db.Raw(sql, satnetName, satnetName).Scan(&result).Error
+	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, nil
+		}
+		return nil, err
+	}
+	if result.Time.IsZero() {
+		return nil, nil
+	}
+	return &result.Time, nil
 }
 
-type gormTerminalStatusRepository struct {
-	db *gorm.DB
-}
-
-func NewGormTerminalStatusRepository(db *gorm.DB) TerminalStatusRepository {
-	return &gormTerminalStatusRepository{db: db}
-}
-
-func (r *gormTerminalStatusRepository) GetTerminalStatus(satnetName string) (*int64, *int64, error) {
+func (r *gormRepository) GetTerminalStatus(satnetName string) (*int64, *int64, error) {
 	if r.db == nil {
 		return nil, nil, fmt.Errorf("koneksi database (DB_FIVE) tidak tersedia")
 	}
 
-	var recordCount int64
-	if err := r.db.Table("modem_kpi").Where("satnet = ?", satnetName).Count(&recordCount).Error; err != nil {
-		return nil, nil, fmt.Errorf("gagal pre-check data terminal: %w", err)
-	}
-
-	if recordCount == 0 {
-		return nil, nil, nil
-	}
-
 	var latestTime struct{ Time time.Time }
-	if err := r.db.Table("modem_kpi").Select("MAX(time) as time").Where("satnet = ?", satnetName).Scan(&latestTime).Error; err != nil {
+	err := r.db.Table("modem_kpi").
+		Select("MAX(time) as time").
+		Where("satnet = ? AND time > NOW() - INTERVAL '15 minutes'", satnetName).
+		Scan(&latestTime).Error
+
+	if err != nil || latestTime.Time.IsZero() {
+		if err == gorm.ErrRecordNotFound || latestTime.Time.IsZero() {
+			return nil, nil, nil
+		}
 		return nil, nil, fmt.Errorf("gagal mendapatkan waktu terakhir data terminal: %w", err)
 	}
 
