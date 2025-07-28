@@ -32,3 +32,9 @@ local.env
 # .idea/
 # .vscode/
 # .vscode/
+
+# log
+*.log
+bella.log
+logs/
+*.json

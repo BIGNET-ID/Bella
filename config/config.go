@@ -3,14 +3,15 @@ package configs
 import (
 	"log"
 	"os"
+	"strings"
 
 	"github.com/joho/godotenv"
 )
 
 type AppConfig struct {
-	DBOneJYP DatabaseConfig
-	DBOneMNK DatabaseConfig
-	DBOneTMK DatabaseConfig
+	DBOneJYP  DatabaseConfig
+	DBOneMNK  DatabaseConfig
+	DBOneTMK  DatabaseConfig
 	DBFiveJYP DatabaseConfig
 	DBFiveMNK DatabaseConfig
 	DBFiveTMK DatabaseConfig
@@ -18,6 +19,19 @@ type AppConfig struct {
 	TelegramToken  string
 	TelegramChatID string
 	CronSchedule   string
+
+	AuthorizedTelegramIDs []string
+
+	PRTGUrl      string
+	PRTGAPITOKEN string
+
+	IPTX_JYP string
+	IPTX_MNK string
+	IPTX_TMK string
+
+	NIF_JYP string
+	NIF_MNK string
+	NIF_TMK string
 }
 
 type DatabaseConfig struct {
@@ -34,10 +48,29 @@ func LoadConfig() *AppConfig {
 		log.Println("Peringatan: Tidak dapat menemukan file local.env, akan menggunakan environment variables yang ada.")
 	}
 
+	rawIDs := getEnv("AUTHORIZED_TELEGRAM_IDS")
+	splitIDs := strings.Split(rawIDs, ",")
+	authorizedIDs := make([]string, 0, len(splitIDs))
+	for _, id := range splitIDs {
+		trimmedID := strings.TrimSpace(id)
+		if trimmedID != "" {
+			authorizedIDs = append(authorizedIDs, trimmedID)
+		}
+	}
+
 	cfg := &AppConfig{
-		TelegramToken:  getEnv("TELEGRAM_BELLA_TOKEN"),
-		TelegramChatID: getEnv("TELEGRAM_BELLA_GROUP_ID"),
-		CronSchedule:   getEnv("CRON_SCHEDULE"),
+		TelegramToken:         getEnv("TELEGRAM_BELLA_TOKEN"),
+		TelegramChatID:        getEnv("TELEGRAM_BELLA_GROUP_ID"),
+		CronSchedule:          getEnv("CRON_SCHEDULE"),
+		AuthorizedTelegramIDs: authorizedIDs,
+		PRTGUrl:               getEnv("PRTG_URL"),
+		PRTGAPITOKEN:          getEnv("PRTG_API_TOKEN"),
+		IPTX_JYP:              getEnv("IPTX_JYP"),
+		IPTX_MNK:              getEnv("IPTX_MNK"),
+		IPTX_TMK:              getEnv("IPTX_TMK"),
+		NIF_JYP:               getEnv("NIF_JYP"),
+		NIF_MNK:               getEnv("NIF_MNK"),
+		NIF_TMK:               getEnv("NIF_TMK"),
 	}
 
 	cfg.DBOneJYP = loadDBConfig("DB_ONE_JYP")
