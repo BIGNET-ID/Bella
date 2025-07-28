@@ -3,46 +3,64 @@ package setup
 import (
 	config "bella/config"
 	"bella/db"
+	// "bella/internal/moddemod"
 	"bella/internal/notifier"
+	"bella/internal/prtgn"
 	"bella/internal/satnet"
-	"log"
+	"bella/internal/state"
+	"log/slog"
 
 	"github.com/robfig/cron/v3"
 	"gorm.io/gorm"
 )
 
-var dbFiveMap = map[string]*gorm.DB{}
+func RegisterServices(allConnections *db.Connections, notifier notifier.Notifier, stateMgr *state.Manager) map[string]*satnet.Service {
+	slog.Info("Menginisialisasi semua service...")
+	serviceMap := make(map[string]*satnet.Service)
 
-func RegisterServicesAndTasks(
-	allConnections *db.Connections,
-	notifier notifier.Notifier,
-	scheduler *cron.Cron,
-	config *config.AppConfig,
-) {
-	log.Println("Mendaftarkan service dan tugas terjadwal...")
-
-	dbFiveMap["DB_ONE_JYP"] = allConnections.DBFiveJYP
-	dbFiveMap["DB_ONE_MNK"] = allConnections.DBFiveMNK
-	dbFiveMap["DB_ONE_TMK"] = allConnections.DBFiveTMK
-
-	register := func(dbOneName string, dbOneConn *gorm.DB) {
-		if dbOneConn == nil {
-			log.Printf("Koneksi untuk %s tidak aktif, tugas dilewati.", dbOneName)
-			return
-		}
-
-		dbFiveConn, ok := dbFiveMap[dbOneName]
-		if !ok || dbFiveConn == nil {
-			log.Printf("PERINGATAN: Koneksi DB_FIVE untuk %s tidak ditemukan/aktif. Tugas tidak akan menyertakan status terminal.", dbOneName)
-			return
-		}
-
-		satnetSvc := satnet.NewService(dbFiveConn, notifier, dbOneName)
-		scheduler.AddFunc(config.CronSchedule, satnetSvc.CheckAndAlert)
-		log.Printf("Service Satnet (dengan status terminal) untuk '%s' berhasil didaftarkan.", dbOneName)
+	dbFiveMap := map[string]*gorm.DB{
+		"JAYAPURA":  allConnections.DBFiveJYP,
+		"MANOKWARI": allConnections.DBFiveMNK,
+		"TIMIKA":    allConnections.DBFiveTMK,
 	}
 
-	register("DB_ONE_JYP", allConnections.DBOneJYP)
-	register("DB_ONE_MNK", allConnections.DBOneMNK)
-	register("DB_ONE_TMK", allConnections.DBOneTMK)
+	for name, dbConn := range dbFiveMap {
+		if dbConn != nil {
+			serviceMap[name] = satnet.NewService(dbConn, notifier, stateMgr, name)
+			slog.Info("Service Satnet untuk gateway berhasil dibuat.", "gateway", name)
+		}
+	}
+	return serviceMap
+}
+
+func RegisterCronJobs(scheduler *cron.Cron, config *config.AppConfig, serviceMap map[string]*satnet.Service, prtgAPI prtgn.PRTGAPIInterface, allConnections *db.Connections, notifier notifier.Notifier, stateMgr *state.Manager) {
+	slog.Info("Mendaftarkan tugas-tugas cron...")
+	
+	for name, service := range serviceMap {
+		svc := service
+		scheduler.AddFunc(config.CronSchedule, svc.CheckAndAlert)
+		slog.Info("Tugas cron Satnet berhasil didaftarkan.", "gateway", name)
+	}
+
+	if prtgAPI != nil {
+		scheduler.AddFunc(config.CronSchedule, prtgAPI.RunPeriodicChecks)
+		slog.Info("Tugas cron untuk Pengecekan PRTG (NIF & IPTX) berhasil didaftarkan.")
+	}
+
+	// --- FITUR MODDEMOD DINONAKTIFKAN SEMENTARA ---
+	/*
+	dbOneMap := map[string]*gorm.DB{
+		"JAYAPURA":  allConnections.DBOneJYP,
+		"MANOKWARI": allConnections.DBOneMNK,
+		"TIMIKA":    allConnections.DBOneTMK,
+	}
+
+	for name, dbConn := range dbOneMap {
+		if dbConn != nil {
+			modemService := moddemod.NewService(dbConn, notifier, stateMgr, name)
+			scheduler.AddFunc(config.CronSchedule, modemService.CheckAndAlert)
+			slog.Info("Tugas cron Modulator/Demodulator berhasil didaftarkan.", "gateway", name)
+		}
+	}
+	*/
 }

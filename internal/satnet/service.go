@@ -1,10 +1,14 @@
 package satnet
 
 import (
-	"bella/internal/notifier"
-	"bella/internal/types"
-	"log"
+	"fmt"
+	"log/slog"
+	"strings"
 	"time"
+
+	"bella/internal/notifier"
+	"bella/internal/state"
+	"bella/internal/types"
 
 	"gorm.io/gorm"
 )
@@ -19,34 +23,92 @@ type Satnet struct {
 type Service struct {
 	repo     Repository
 	notifier notifier.Notifier
+	state    *state.Manager
 	name     string
 }
 
-func NewService(dbFive *gorm.DB, notifier notifier.Notifier, name string) *Service {
+func NewService(dbFive *gorm.DB, notifier notifier.Notifier, stateMgr *state.Manager, name string) *Service {
 	return &Service{
 		repo:     NewGormRepository(dbFive),
 		notifier: notifier,
+		state:    stateMgr,
 		name:     name,
 	}
 }
 
 func (s *Service) CheckAndAlert() {
+	slog.Info("Cron job terpicu, memulai pengecekan Satnet...", "gateway", s.name)
+
+	previousAlerts := s.state.GetActiveAlerts()
+	degradedSatnets, err := s.getCurrentDownSatnets()
+	if err != nil {
+		slog.Error("Gagal mendapatkan status Satnet saat ini", "gateway", s.name, "error", err)
+		return
+	}
+
+	currentDownMap := make(map[string]types.SatnetDetail)
+	for _, satnet := range degradedSatnets {
+		currentDownMap[satnet.Name] = satnet
+	}
+
+	newDownSatnets := []types.SatnetDetail{}
+	for satnetName, satnetDetail := range currentDownMap {
+		alertKey := s.getAlertKey(satnetName)
+		if _, exists := previousAlerts[alertKey]; !exists {
+			slog.Info("Satnet BARU terdeteksi DOWN", "gateway", s.name, "satnet", satnetName)
+			newDownSatnets = append(newDownSatnets, satnetDetail)
+			s.state.AddAlert(alertKey, state.ActiveAlert{
+				Type:    "satnet",
+				Gateway: s.name,
+				Details: satnetDetail,
+			})
+		}
+	}
+	if len(newDownSatnets) > 0 {
+		report := types.GatewayReport{FriendlyName: s.name, Satnets: newDownSatnets}
+		if err := s.notifier.SendSatnetAlert(report); err != nil {
+			slog.Error("Gagal mengirim notifikasi Satnet DOWN", "gateway", s.name, "error", err)
+		}
+	}
+
+	recoveredSatnets := []types.SatnetUpAlert{}
+	prefix := fmt.Sprintf("satnet_%s_", s.name)
+	for key := range previousAlerts {
+		if strings.HasPrefix(key, prefix) {
+			satnetName := strings.TrimPrefix(key, prefix)
+			if _, stillDown := currentDownMap[satnetName]; !stillDown {
+				slog.Info("Satnet terdeteksi PULIH", "gateway", s.name, "satnet", satnetName)
+				recoveredSatnets = append(recoveredSatnets, types.SatnetUpAlert{
+					GatewayName:  s.name,
+					SatnetName:   satnetName,
+					RecoveryTime: time.Now(),
+				})
+				s.state.RemoveAlertByKey(key)
+			}
+		}
+	}
+	if len(recoveredSatnets) > 0 {
+		if err := s.notifier.SendSatnetUpAlert(recoveredSatnets); err != nil {
+			slog.Error("Gagal mengirim notifikasi Satnet UP", "gateway", s.name, "error", err)
+		}
+	}
+}
+
+func (s *Service) getCurrentDownSatnets() ([]types.SatnetDetail, error) {
 	const thresholdKbps = 1000.0
 	const alertThreshold = 3
 
 	allData, err := s.repo.GetLastSatnetData()
 	if err != nil {
-		log.Printf("[%s] Error mendapatkan data satnet: %v", s.name, err)
-		return
+		return nil, err
 	}
 
 	var degradedSatnetsForReport []types.SatnetDetail
-
 	for _, data := range allData {
 		if data.FwdThroughput < thresholdKbps {
 			online, offline, err := s.repo.GetTerminalStatus(data.Name)
 			if err != nil {
-				log.Printf("[%s] Gagal mendapatkan status terminal untuk %s: %v", s.name, data.Name, err)
+				slog.Warn("Gagal mendapatkan status terminal", "gateway", s.name, "satnet", data.Name, "error", err)
 			}
 
 			var totalAffected int64
@@ -57,14 +119,8 @@ func (s *Service) CheckAndAlert() {
 				totalAffected += *offline
 			}
 
-			sendAlert := totalAffected > alertThreshold
-
-			if sendAlert {
-				startIssueTime, err := s.repo.GetStartIssueTime(data.Name)
-				if err != nil {
-					log.Printf("[%s] Gagal mendapatkan start issue time untuk %s: %v", s.name, data.Name, err)
-				}
-
+			if totalAffected > alertThreshold {
+				startIssueTime, _ := s.repo.GetStartIssueTime(data.Name)
 				degradedSatnetsForReport = append(degradedSatnetsForReport, types.SatnetDetail{
 					Name:         data.Name,
 					FwdTp:        data.FwdThroughput,
@@ -77,19 +133,9 @@ func (s *Service) CheckAndAlert() {
 			}
 		}
 	}
+	return degradedSatnetsForReport, nil
+}
 
-	if len(degradedSatnetsForReport) > 0 {
-		report := types.GatewayReport{
-			FriendlyName: s.name,
-			Satnets:      degradedSatnetsForReport,
-		}
-		log.Printf("[%s] Terdeteksi %d satnet memenuhi kriteria alert. Mengirim notifikasi...", s.name, len(degradedSatnetsForReport))
-		err := s.notifier.SendSatnetAlert(report)
-		if err != nil {
-			log.Printf("[%s] Gagal mengirim notifikasi: %v", s.name, err)
-		}
-	} else {
-		log.Printf("[%s] Semua satnet dalam kondisi normal atau di bawah ambang batas notifikasi.", s.name)
-	}
-
+func (s *Service) getAlertKey(satnetName string) string {
+	return fmt.Sprintf("satnet_%s_%s", s.name, satnetName)
 }

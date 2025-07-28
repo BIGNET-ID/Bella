@@ -3,44 +3,60 @@ package main
 import (
 	configs "bella/config"
 	"bella/db"
+	"bella/internal/bot"
+	"bella/internal/logger"
 	"bella/internal/notifier"
+	"bella/internal/prtgn"
+	"bella/internal/state"
 	"bella/setup"
-	"log"
+	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
 
+	_ "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	"github.com/robfig/cron/v3"
 )
 
 func main() {
-	log.Println("Memulai Bella Alert System ....")
+	logger.InitSlog()
+
+	slog.Info("Memulai Bella Alert System & Bot ....")
 
 	config := configs.LoadConfig()
-
 	allConnections := db.InitializeDatabases(config)
-	
 	defer allConnections.CloseAll()
 
+	stateManager := state.NewManager("logs/active_alerts.json")
 	telegramNotifier := notifier.NewTelegramNotifier(config.TelegramToken, config.TelegramChatID)
 
+	satnetServiceMap := setup.RegisterServices(allConnections, telegramNotifier, stateManager)
+	prtgAPI := prtgn.NewPRTGAPI(config, telegramNotifier, stateManager)
+
 	scheduler := cron.New()
-
-	setup.RegisterServicesAndTasks(allConnections, telegramNotifier, scheduler, config)
-
+	setup.RegisterCronJobs(scheduler, config, satnetServiceMap, prtgAPI, allConnections, telegramNotifier, stateManager)
+	
 	if len(scheduler.Entries()) > 0 {
 		scheduler.Start()
-		log.Printf("Scheduler berhasil dimulai dengan %d tugas.", len(scheduler.Entries()))
+		slog.Info("Scheduler berhasil dimulai", "tasks_count", len(scheduler.Entries()))
 	} else {
-		log.Println("Tidak ada tugas yang berhasil didaftarkan di scheduler. Aplikasi akan berhenti karena tidak ada pekerjaan yang harus dilakukan.")
-		return
+		slog.Warn("Tidak ada tugas cron yang didaftarkan.")
 	}
 
+	botHandler, err := bot.NewBotHandler(config)
+	if err != nil {
+		slog.Error("Gagal membuat bot handler", "error", err)
+		os.Exit(1)
+	}
+	go botHandler.StartPolling()
+
+	slog.Info("Aplikasi berjalan. Tekan Ctrl+C untuk berhenti.")
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
-	log.Println("Menerima sinyal shutdown, menghentikan scheduler...")
+
+	slog.Info("Menerima sinyal shutdown, menghentikan scheduler...")
 	ctx := scheduler.Stop()
 	<-ctx.Done()
-	log.Println("Aplikasi berhasil dihentikan.")
+	slog.Info("Aplikasi berhasil dihentikan.")
 }
