@@ -49,32 +49,37 @@ func (s *Service) checkDevices(deviceType string) {
 	}
 
 	previousAlerts := s.state.GetActiveAlerts()
+
+	if len(currentDownDevices) > 0 {
+		slog.Info("Perangkat terdeteksi DOWN, mengirim notifikasi...", "gateway", s.name, "type", deviceType, "count", len(currentDownDevices))
+		downAlerts := []types.ModemDownAlert{}
+		for _, deviceStatus := range currentDownDevices {
+			downAlerts = append(downAlerts, types.ModemDownAlert{
+				GatewayName: s.name,
+				DeviceName:  deviceStatus.DeviceName,
+				AlarmState:  deviceStatus.AlarmState,
+				StartTime:   deviceStatus.UpdatedAt,
+			})
+		}
+		if err := s.notifier.SendModemDownAlert(downAlerts, deviceType); err != nil {
+			slog.Error("Gagal mengirim notifikasi DOWN", "gateway", s.name, "type", deviceType, "error", err)
+		}
+	}
+
 	currentDownMap := make(map[string]DeviceStatus)
 	for _, dev := range currentDownDevices {
 		currentDownMap[dev.DeviceName] = dev
 	}
 
-	newDownAlerts := []types.ModemDownAlert{}
-	for deviceName, deviceStatus := range currentDownMap {
-		alertKey := s.getAlertKey(deviceName, deviceType)
+	for _, deviceStatus := range currentDownDevices {
+		alertKey := s.getAlertKey(deviceStatus.DeviceName, deviceType)
 		if _, exists := previousAlerts[alertKey]; !exists {
-			slog.Info("Perangkat BARU terdeteksi DOWN", "gateway", s.name, "type", deviceType, "device", deviceName)
-			newDownAlerts = append(newDownAlerts, types.ModemDownAlert{
-				GatewayName: s.name,
-				DeviceName:  deviceName,
-				AlarmState:  deviceStatus.AlarmState,
-				StartTime:   deviceStatus.UpdatedAt,
-			})
+			slog.Info("Menambahkan perangkat DOWN baru ke state", "gateway", s.name, "type", deviceType, "device", deviceStatus.DeviceName)
 			s.state.AddAlert(alertKey, state.ActiveAlert{
 				Type:    deviceType,
 				Gateway: s.name,
 				Details: deviceStatus,
 			})
-		}
-	}
-	if len(newDownAlerts) > 0 {
-		if err := s.notifier.SendModemDownAlert(newDownAlerts, deviceType); err != nil {
-			slog.Error("Gagal mengirim notifikasi DOWN", "gateway", s.name, "type", deviceType, "error", err)
 		}
 	}
 

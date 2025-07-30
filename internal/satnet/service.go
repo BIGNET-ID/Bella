@@ -46,17 +46,23 @@ func (s *Service) CheckAndAlert() {
 		return
 	}
 
+	if len(degradedSatnets) > 0 {
+		slog.Info("Satnet terdeteksi DOWN, mengirim notifikasi...", "gateway", s.name, "count", len(degradedSatnets))
+		report := types.GatewayReport{FriendlyName: s.name, Satnets: degradedSatnets}
+		if err := s.notifier.SendSatnetAlert(report); err != nil {
+			slog.Error("Gagal mengirim notifikasi Satnet DOWN", "gateway", s.name, "error", err)
+		}
+	}
+
 	currentDownMap := make(map[string]types.SatnetDetail)
 	for _, satnet := range degradedSatnets {
 		currentDownMap[satnet.Name] = satnet
 	}
 
-	newDownSatnets := []types.SatnetDetail{}
-	for satnetName, satnetDetail := range currentDownMap {
-		alertKey := s.getAlertKey(satnetName)
+	for _, satnetDetail := range degradedSatnets {
+		alertKey := s.getAlertKey(satnetDetail.Name)
 		if _, exists := previousAlerts[alertKey]; !exists {
-			slog.Info("Satnet BARU terdeteksi DOWN", "gateway", s.name, "satnet", satnetName)
-			newDownSatnets = append(newDownSatnets, satnetDetail)
+			slog.Info("Menambahkan Satnet DOWN baru ke state", "gateway", s.name, "satnet", satnetDetail.Name)
 			s.state.AddAlert(alertKey, state.ActiveAlert{
 				Type:    "satnet",
 				Gateway: s.name,
@@ -64,13 +70,7 @@ func (s *Service) CheckAndAlert() {
 			})
 		}
 	}
-	if len(newDownSatnets) > 0 {
-		report := types.GatewayReport{FriendlyName: s.name, Satnets: newDownSatnets}
-		if err := s.notifier.SendSatnetAlert(report); err != nil {
-			slog.Error("Gagal mengirim notifikasi Satnet DOWN", "gateway", s.name, "error", err)
-		}
-	}
-
+	
 	recoveredSatnets := []types.SatnetUpAlert{}
 	prefix := fmt.Sprintf("satnet_%s_", s.name)
 	for key := range previousAlerts {

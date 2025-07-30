@@ -90,7 +90,7 @@ func (t *telegramNotifier) SendSatnetAlert(report types.GatewayReport) error {
 		alertTitle,
 		eventLine,
 		gatewayLine,
-		escapeMarkdownV2("────────────────────────"),
+		escapeMarkdownV2("───────────────"),
 	)
 	messageBuilder.WriteString(header)
 
@@ -114,7 +114,7 @@ func (t *telegramNotifier) SendSatnetAlert(report types.GatewayReport) error {
 		rtnStr := escapeMarkdownV2(fmt.Sprintf("%.2f", satnet.RtnTp))
 
 		satnetInfo := fmt.Sprintf(
-			" 🟥 *SATNET:* %s\n"+
+			"  🟥 *SATNET:* %s\n"+
 				"   ├─ *FWD :* %s kbps `(LOW)`\n"+
 				"   ├─ *RTN :* %s kbps\n"+
 				"   ├─ *Online UT :* %s\n"+
@@ -151,7 +151,7 @@ func (t *telegramNotifier) SendSatnetUpAlert(alerts []types.SatnetUpAlert) error
 		title,
 		eventLine,
 		gatewayLine,
-		escapeMarkdownV2("────────────────────────"),
+		escapeMarkdownV2("───────────────"),
 	)
 	messageBuilder.WriteString(header)
 
@@ -173,7 +173,7 @@ func (t *telegramNotifier) SendPrtgTrafficDownAlert(traffic types.PRTGDownAlert)
 	alertTitle := "🔴 *CRITICAL ALERT*"
 	eventLine := "🍎 *EVENT:* IPTX TRAFFIC LOW"
 	gatewayLine := fmt.Sprintf("🔰 *GATEWAY:* %s", escapeMarkdownV2(traffic.Location))
-	separator := escapeMarkdownV2("────────────────────────")
+	separator := escapeMarkdownV2("───────────────")
 
 	header := fmt.Sprintf("%s\n\n%s\n%s\n%s\n\n", alertTitle, eventLine, gatewayLine, separator)
 	messageBuilder.WriteString(header)
@@ -200,7 +200,7 @@ func (t *telegramNotifier) SendPrtgNIFDownAlert(nif types.PRTGDownAlert) error {
 	alertTitle := "🔴 *CRITICAL ALERT*"
 	eventLine := "🍎 *EVENT:* NIF TRAFFIC LOW"
 	gatewayLine := fmt.Sprintf("🔰 *GATEWAY:* %s", escapeMarkdownV2(nif.Location))
-	separator := escapeMarkdownV2("────────────────────────")
+	separator := escapeMarkdownV2("───────────────")
 
 	header := fmt.Sprintf("%s\n\n%s\n%s\n%s\n\n", alertTitle, eventLine, gatewayLine, separator)
 	messageBuilder.WriteString(header)
@@ -227,7 +227,7 @@ func (t *telegramNotifier) SendPrtgUpAlert(alert types.PRTGUpAlert) error {
 	title := "🟢 *RECOVERY INFO*"
 	eventType := fmt.Sprintf("🍏 *EVENT:* %s RECOVERED", escapeMarkdownV2(alert.SensorType))
 	gatewayLine := fmt.Sprintf("🔰 *GATEWAY:* %s", escapeMarkdownV2(alert.Location))
-	separator := escapeMarkdownV2("────────────────────────")
+	separator := escapeMarkdownV2("───────────────")
 
 	header := fmt.Sprintf("%s\n\n%s\n%s\n%s\n\n", title, eventType, gatewayLine, separator)
 	messageBuilder.WriteString(header)
@@ -254,7 +254,7 @@ func (t *telegramNotifier) SendModemDownAlert(alerts []types.ModemDownAlert, dev
 	alertTitle := "🔴 *CRITICAL ALERT*"
 	eventLine := fmt.Sprintf("🍎 *EVENT:* %d %s DOWN", len(alerts), escapeMarkdownV2(deviceTypeUpper))
 	gatewayLine := fmt.Sprintf("🔰 *GATEWAY:* %s", escapeMarkdownV2(friendlyGatewayName))
-	header := fmt.Sprintf("%s\n\n%s\n%s\n%s\n\n", alertTitle, eventLine, gatewayLine, escapeMarkdownV2("────────────────────────"))
+	header := fmt.Sprintf("%s\n\n%s\n%s\n%s\n\n", alertTitle, eventLine, gatewayLine, escapeMarkdownV2("───────────────"))
 	messageBuilder.WriteString(header)
 
 	for _, alert := range alerts {
@@ -290,7 +290,7 @@ func (t *telegramNotifier) SendModemUpAlert(alerts []types.ModemUpAlert, deviceT
 	title := "🟢 *RECOVERY INFO*"
 	eventLine := fmt.Sprintf("🍏 *EVENT:* %d %s UP", len(alerts), escapeMarkdownV2(deviceTypeUpper))
 	gatewayLine := fmt.Sprintf("🔰 *GATEWAY:* %s", escapeMarkdownV2(friendlyGatewayName))
-	header := fmt.Sprintf("%s\n\n%s\n%s\n%s\n\n", title, eventLine, gatewayLine, escapeMarkdownV2("────────────────────────"))
+	header := fmt.Sprintf("%s\n\n%s\n%s\n%s\n\n", title, eventLine, gatewayLine, escapeMarkdownV2("───────────────"))
 	messageBuilder.WriteString(header)
 
 	for _, alert := range alerts {
