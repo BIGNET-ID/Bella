@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"math"
 	"net/http"
 	"regexp"
 	"strconv"
@@ -39,12 +40,17 @@ type PRTGAPI struct {
 	State       *state.Manager
 	NifSensors  map[string]string
 	IptxSensors map[string]string
+	Timezone    *time.Location
 }
+
 func NewPRTGAPI(config *configs.AppConfig, notifier notifier.Notifier, stateMgr *state.Manager) PRTGAPIInterface {
 	if config.PRTGUrl == "" || config.PRTGAPITOKEN == "" {
 		slog.Warn("Konfigurasi PRTG (URL/Token) hilang. Service PRTG tidak akan berjalan.")
 		return nil
 	}
+
+	wibLocation := time.FixedZone("WIB", 7*60*60)
+
 	return &PRTGAPI{
 		BaseURL:  config.PRTGUrl,
 		APIToken: config.PRTGAPITOKEN,
@@ -56,15 +62,15 @@ func NewPRTGAPI(config *configs.AppConfig, notifier notifier.Notifier, stateMgr 
 		IptxSensors: map[string]string{
 			"JAYAPURA": config.IPTX_JYP, "MANOKWARI": config.IPTX_MNK, "TIMIKA": config.IPTX_TMK,
 		},
+		Timezone: wibLocation,
 	}
 }
-
 
 func (p *PRTGAPI) RunPeriodicChecks() {
 	slog.Info("Memulai pengecekan periodik PRTG untuk semua sensor...")
 
 	previousAlerts := p.State.GetActiveAlerts()
-	
+
 	allSensors := map[string]map[string]string{
 		"NIF":  p.NifSensors,
 		"IPTX": p.IptxSensors,
@@ -111,21 +117,25 @@ func (p *PRTGAPI) checkSensorAndNotify(location, id, sensorType string, previous
 
 	_, wasPreviouslyDown := previousAlerts[alertKey]
 
-	if isCurrentlyDown && !wasPreviouslyDown {
-		slog.Warn("Alert PRTG BARU terdeteksi", "key", alertKey)
+	if isCurrentlyDown {
+		slog.Warn("Sensor PRTG terdeteksi DOWN, mengirim notifikasi...", "key", alertKey)
 		alertData := p.createDownAlert(location, sensorType, sensorData, alertValue)
 		p.sendDownAlert(alertData)
-		p.State.AddAlert(alertKey, state.ActiveAlert{
-			Type: "prtg", Gateway: location, Details: alertData,
-		})
-	} else if !isCurrentlyDown && wasPreviouslyDown {
+
+		if !wasPreviouslyDown {
+			slog.Info("Menambahkan alert PRTG baru ke state", "key", alertKey)
+			p.State.AddAlert(alertKey, state.ActiveAlert{
+				Type: "prtg", Gateway: location, Details: alertData,
+			})
+		}
+	} else if wasPreviouslyDown {
 		slog.Info("Sensor PRTG terdeteksi PULIH", "key", alertKey)
 		upAlert := types.PRTGUpAlert{
 			Location:       p.Notifier.DetermineFriendlyGatewayName(location),
 			SensorFullName: sensorData.Name,
 			DeviceName:     sensorData.ParentDeviceName,
 			SensorType:     sensorType,
-			RecoveryTime:   time.Now(),
+			RecoveryTime:   time.Now().In(p.Timezone),
 		}
 		if err := p.Notifier.SendPrtgUpAlert(upAlert); err != nil {
 			slog.Error("Gagal mengirim notifikasi pemulihan PRTG", "key", alertKey, "error", err)
@@ -143,9 +153,9 @@ func (p *PRTGAPI) createDownAlert(location, sensorType string, sensorData Sensor
 		Status:         sensorData.StatusText,
 		Value:          value,
 		LastMessage:    sensorData.LastMessage,
-		LastCheck:      p.extractTimeAgo(sensorData.LastCheck),
-		LastUp:         p.extractTimeAgo(sensorData.LastUp),
-		LastDown:       p.extractTimeAgo(sensorData.LastDown),
+		LastCheck:      p.convertOAtoTime(sensorData.LastCheck),
+		LastUp:         p.convertOAtoTime(sensorData.LastUp),
+		LastDown:       p.convertOAtoTime(sensorData.LastDown),
 	}
 }
 func (p *PRTGAPI) sendDownAlert(alertData types.PRTGDownAlert) {
@@ -182,14 +192,35 @@ func (p *PRTGAPI) parseAndConvertValue(valueStr string) (float64, error) {
 		return value, nil
 	}
 }
-func (p *PRTGAPI) extractTimeAgo(fullString string) string {
-	re := regexp.MustCompile(`\[(.*?)\]`)
-	matches := re.FindStringSubmatch(fullString)
-	if len(matches) > 1 {
-		return matches[1]
+
+func (p *PRTGAPI) convertOAtoTime(oaDateStr string) string {
+	re := regexp.MustCompile(`^[0-9]+\.?[0-9]*`)
+	numberPart := re.FindString(oaDateStr)
+	if numberPart == "" || numberPart == "-" {
+		return "-"
 	}
-	if fullString != "-" {
-		return fullString
+
+	oaDate, err := strconv.ParseFloat(numberPart, 64)
+	if err != nil {
+		return oaDateStr
 	}
-	return ""
+
+	baseDate := time.Date(1899, 12, 30, 0, 0, 0, 0, time.UTC)
+	durationInDays := time.Duration(oaDate * float64(24*time.Hour))
+	utcTime := baseDate.Add(durationInDays)
+
+	wibTime := utcTime.In(p.Timezone)
+
+	return wibTime.Format("2006-01-02 15:04:05 WIB")
+}
+
+func OADateToTime(oaDate float64) time.Time {
+	oleBase := time.Date(1899, 12, 30, 0, 0, 0, 0, time.UTC)
+	duration := time.Duration(oaDate * float64(24*time.Hour))
+	return oleBase.Add(duration)
+}
+
+func SecondsToTime(seconds float64) time.Time {
+	sec, dec := math.Modf(seconds)
+	return time.Unix(int64(sec), int64(dec*(1e9)))
 }
