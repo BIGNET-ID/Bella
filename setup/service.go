@@ -3,7 +3,7 @@ package setup
 import (
 	config "bella/config"
 	"bella/db"
-	// "bella/internal/moddemod"
+	"bella/internal/moddemod"
 	"bella/internal/notifier"
 	"bella/internal/prtgn"
 	"bella/internal/satnet"
@@ -47,8 +47,7 @@ func RegisterCronJobs(scheduler *cron.Cron, config *config.AppConfig, serviceMap
 		slog.Info("Tugas cron untuk Pengecekan PRTG (NIF & IPTX) berhasil didaftarkan.")
 	}
 
-	// --- FITUR MODDEMOD DINONAKTIFKAN SEMENTARA ---
-	/*
+
 	dbOneMap := map[string]*gorm.DB{
 		"JAYAPURA":  allConnections.DBOneJYP,
 		"MANOKWARI": allConnections.DBOneMNK,
@@ -62,5 +61,4 @@ func RegisterCronJobs(scheduler *cron.Cron, config *config.AppConfig, serviceMap
 			slog.Info("Tugas cron Modulator/Demodulator berhasil didaftarkan.", "gateway", name)
 		}
 	}
-	*/
 }

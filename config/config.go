@@ -32,6 +32,13 @@ type AppConfig struct {
 	NIF_JYP string
 	NIF_MNK string
 	NIF_TMK string
+
+	G1gURL string
+	G1kURL string
+	G1lURL string
+
+	APIEmail    string
+	APIPassword string
 }
 
 type DatabaseConfig struct {
@@ -61,16 +68,27 @@ func LoadConfig() *AppConfig {
 	cfg := &AppConfig{
 		TelegramToken:         getEnv("TELEGRAM_BELLA_TOKEN"),
 		TelegramChatID:        getEnv("TELEGRAM_BELLA_GROUP_ID"),
-		CronSchedule:          getEnv("CRON_SCHEDULE"),
 		AuthorizedTelegramIDs: authorizedIDs,
-		PRTGUrl:               getEnv("PRTG_URL"),
-		PRTGAPITOKEN:          getEnv("PRTG_API_TOKEN"),
-		IPTX_JYP:              getEnv("IPTX_JYP"),
-		IPTX_MNK:              getEnv("IPTX_MNK"),
-		IPTX_TMK:              getEnv("IPTX_TMK"),
-		NIF_JYP:               getEnv("NIF_JYP"),
-		NIF_MNK:               getEnv("NIF_MNK"),
-		NIF_TMK:               getEnv("NIF_TMK"),
+
+		CronSchedule: getEnv("CRON_SCHEDULE"),
+
+		PRTGUrl:      getEnv("PRTG_URL"),
+		PRTGAPITOKEN: getEnv("PRTG_API_TOKEN"),
+
+		IPTX_JYP: getEnv("IPTX_JYP"),
+		IPTX_MNK: getEnv("IPTX_MNK"),
+		IPTX_TMK: getEnv("IPTX_TMK"),
+
+		NIF_JYP: getEnv("NIF_JYP"),
+		NIF_MNK: getEnv("NIF_MNK"),
+		NIF_TMK: getEnv("NIF_TMK"),
+
+		G1gURL: getEnv("G1G_URL"),
+		G1kURL: getEnv("G1K_URL"),
+		G1lURL: getEnv("G1L_URL"),
+
+		APIEmail:    getEnv("API_EMAIL"),
+		APIPassword: getEnv("API_PASSWORD"),
 	}
 
 	cfg.DBOneJYP = loadDBConfig("DB_ONE_JYP")
