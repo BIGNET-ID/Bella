@@ -1,4 +1,3 @@
-
 package bot
 
 import (

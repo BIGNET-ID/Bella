@@ -35,26 +35,32 @@ func NewBotHandler(config *config.AppConfig, apiClient *api.APIClient) (*BotHand
 
 	commandHandler := NewCommandHandler(bot, config, apiClient)
 
-	commands := []tgbotapi.BotCommand{
-		{Command: "help", Description: "Tampilkan bantuan"},
-		{Command: "myid", Description: "Tampilkan ID Telegram Anda"},
-		{Command: "satria1_gateway_all", Description: "Ringkasan status semua Gateway SATRIA-1"},
-		{Command: "satria1_gateway_jyp", Description: "Ringkasan status Gateway Jayapura"},
-		{Command: "satria1_gateway_mnk", Description: "Ringkasan status Gateway Manokwari"},
-		{Command: "satria1_gateway_tmk", Description: "Ringkasan status Gateway Timika"},
-		{Command: "satria1_iptx_jyp", Description: "Info IP Transit Gateway Jayapura"},
-		{Command: "satria1_iptx_mnk", Description: "Info IP Transit Gateway Manokwari"},
-		{Command: "satria1_iptx_tmk", Description: "Info IP Transit Gateway Timika"},
-	}
-	if _, err := bot.Request(tgbotapi.NewSetMyCommands(commands...)); err != nil {
-		slog.Warn("Gagal mendaftarkan perintah bot", "error", err)
-	}
-
 	return &BotHandler{
 		bot:            bot,
 		authorizedIDs:  authMap,
 		commandHandler: commandHandler,
 	}, nil
+}
+
+
+// setCommandsForUser mengatur daftar perintah yang terlihat oleh pengguna spesifik.
+func (h *BotHandler) setCommandsForUser(chatID int64, isAuthorized bool) {
+	var commands []tgbotapi.BotCommand
+	if isAuthorized {
+		commands = getAdminCommands()
+	} else {
+		commands = getPublicCommands()
+	}
+
+	// Menggunakan scope untuk menargetkan chat spesifik (pengguna)
+	scope := tgbotapi.NewBotCommandScopeChat(chatID)
+	config := tgbotapi.NewSetMyCommandsWithScope(scope, commands...)
+
+	if _, err := h.bot.Request(config); err != nil {
+		slog.Warn("Gagal mengatur perintah untuk pengguna", "chat_id", chatID, "error", err)
+	} else {
+		slog.Info("Berhasil mengatur perintah untuk pengguna", "chat_id", chatID, "is_admin", isAuthorized)
+	}
 }
 
 func (h *BotHandler) StartPolling() {
@@ -70,21 +76,50 @@ func (h *BotHandler) StartPolling() {
 	}
 }
 
+
 func (h *BotHandler) handleCommand(message *tgbotapi.Message) {
 	userID := message.From.ID
-	if !h.authorizedIDs[userID] {
-		h.commandHandler.sendMessage(message.Chat.ID, escape("Maaf, Anda tidak memiliki izin untuk menggunakan bot ini."))
+	isAuthorized := h.authorizedIDs[userID]
+	command := message.Command()
+
+	slog.Info("Menerima perintah", "command", command, "from", message.From.UserName, "user_id", userID)
+
+	// Saat pengguna berinteraksi dengan /start atau /help,
+	// perbarui daftar perintah yang mereka lihat.
+	if command == "start" || command == "help" {
+		h.setCommandsForUser(message.Chat.ID, isAuthorized)
+	}
+
+	// Daftar lengkap perintah admin untuk pengecekan akses
+	adminCommands := map[string]bool{
+		"satria1_gateway_all":   true,
+		"satria1_gateway_jyp":   true,
+		"satria1_gateway_mnk":   true,
+		"satria1_gateway_tmk":   true,
+		"satria1_iptx_jyp":      true,
+		"satria1_iptx_mnk":      true,
+		"satria1_iptx_tmk":      true,
+		"log_error":             true,
+		"log_notif":             true,
+		"log_alerts_active":     true,
+		"log_all":               true,
+	}
+
+	// Cek otorisasi HANYA untuk perintah yang terdaftar sebagai admin
+	if adminCommands[command] && !isAuthorized {
+		h.commandHandler.sendMessage(message.Chat.ID, escape("❌ *Akses Ditolak*! Anda tidak memiliki izin untuk menggunakan perintah ini."))
 		return
 	}
 
-	slog.Info("Menerima perintah", "command", message.Command(), "from", message.From.UserName)
-
-	switch message.Command() {
+	// Routing perintah
+	switch command {
 	case "start", "help":
-		h.commandHandler.sendMessage(message.Chat.ID, escape("Selamat datang! Silakan pilih perintah yang tersedia."))
+		helpMessage := GetHelpMessage(isAuthorized)
+		h.commandHandler.sendMessage(message.Chat.ID, helpMessage)
 	case "myid":
-		h.commandHandler.sendMessage(message.Chat.ID, fmt.Sprintf("ID Telegram Anda adalah: `%d`", userID))
+		h.commandHandler.sendMessage(message.Chat.ID, FormatMyIDMessage(userID))
 
+	// Perintah Gateway (sudah dipastikan terotorisasi)
 	case "satria1_gateway_jyp":
 		go h.commandHandler.HandleGatewaySummary(message.Chat.ID, "Jayapura")
 	case "satria1_gateway_mnk":
@@ -94,6 +129,7 @@ func (h *BotHandler) handleCommand(message *tgbotapi.Message) {
 	case "satria1_gateway_all":
 		go h.commandHandler.HandleGatewayAll(message.Chat.ID)
 
+	// Perintah IP Transit (sudah dipastikan terotorisasi)
 	case "satria1_iptx_jyp":
 		go h.commandHandler.HandleIpTransitInfo(message.Chat.ID, "Jayapura")
 	case "satria1_iptx_mnk":
@@ -101,7 +137,14 @@ func (h *BotHandler) handleCommand(message *tgbotapi.Message) {
 	case "satria1_iptx_tmk":
 		go h.commandHandler.HandleIpTransitInfo(message.Chat.ID, "Timika")
 
+	// Perintah Log (sudah dipastikan terotorisasi)
+	case "log_error", "log_notif", "log_alerts_active", "log_all":
+		go h.commandHandler.HandleLogs(message.Chat.ID, command)
+
 	default:
-		h.commandHandler.sendMessage(message.Chat.ID, escape("Perintah tidak dikenal. Ketik /help untuk melihat daftar perintah."))
+		// Jangan kirim "perintah tidak dikenal" jika itu adalah perintah admin oleh non-admin
+		if !adminCommands[command] {
+			h.commandHandler.sendMessage(message.Chat.ID, escape("Perintah tidak dikenal. Ketik /help untuk melihat daftar perintah."))
+		}
 	}
 }

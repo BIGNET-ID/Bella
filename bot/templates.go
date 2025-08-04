@@ -7,6 +7,73 @@ import (
 	"time"
 )
 
+// GetHelpMessage membuat pesan bantuan yang dinamis berdasarkan status otorisasi pengguna.
+func GetHelpMessage(isAdmin bool) string {
+	var sb strings.Builder
+
+	sb.WriteString("👋 *Selamat Datang di Bella Bot Monitoring* 👋\n\n")
+	sb.WriteString("Saya adalah asisten virtual untuk memantau kondisi jaringan SATRIA\\-1\\. Berikut adalah daftar perintah yang bisa Anda gunakan:\n\n")
+
+	if isAdmin {
+		// Tampilan untuk Admin
+		sb.WriteString("🛰️ *Perintah Status Gateway*\n")
+		sb.WriteString(escape("───────────────\n"))
+		sb.WriteString("`/satria1_gateway_all` \\- Ringkasan status semua Gateway\n")
+		sb.WriteString("`/satria1_gateway_jyp` \\- Ringkasan status Gateway Jayapura\n")
+		sb.WriteString("`/satria1_gateway_mnk` \\- Ringkasan status Gateway Manokwari\n")
+		sb.WriteString("`/satria1_gateway_tmk` \\- Ringkasan status Gateway Timika\n\n")
+
+		sb.WriteString("📊 *Perintah Info IP Transit*\n")
+		sb.WriteString(escape("───────────────\n"))
+		sb.WriteString("`/satria1_iptx_jyp` \\- Info IP Transit Gateway Jayapura\n")
+		sb.WriteString("`/satria1_iptx_mnk` \\- Info IP Transit Gateway Manokwari\n")
+		sb.WriteString("`/satria1_iptx_tmk` \\- Info IP Transit Gateway Timika\n\n")
+
+		sb.WriteString("🛠️ *Perintah Log & Diagnostik*\n")
+		sb.WriteString(escape("───────────────\n"))
+		sb.WriteString("`/log_error` \\- Tampilkan 15 log error terakhir\n")
+		sb.WriteString("`/log_notif` \\- Tampilkan 15 log notifikasi terakhir\n")
+		sb.WriteString("`/log_alerts_active` \\- Tampilkan semua alert yang aktif\n")
+		sb.WriteString("`/log_all` \\- Tampilkan 20 log mentah terakhir\n\n")
+
+		sb.WriteString("⚙️ *Perintah Umum*\n")
+		sb.WriteString(escape("───────────────\n"))
+		sb.WriteString("`/myid` \\- Menampilkan ID Telegram Anda\n")
+		sb.WriteString("`/help` \\- Menampilkan pesan bantuan ini\n\n")
+
+		sb.WriteString("💡 *Tips:* Anda memiliki akses penuh sebagai *Admin*\\.\n")
+
+	} else {
+		// Tampilan untuk Pengguna Publik
+		sb.WriteString("🔰 *Perintah*\n")
+		sb.WriteString(escape("───────────────\n"))
+		sb.WriteString("`/start` \\- Memulai interaksi dengan bot\n")
+		sb.WriteString("`/help` \\- Menampilkan pesan bantuan ini\n")
+		sb.WriteString("`/myid` \\- Menampilkan ID Telegram Anda\n\n")
+
+		sb.WriteString("🔒 *Akses Terbatas*\n")
+		sb.WriteString("Anda menggunakan bot sebagai pengguna publik\\. Untuk mendapatkan akses ke fitur admin \\(seperti melihat status gateway dan log\\), silakan berikan ID Telegram Anda kepada administrator sistem\\.\n")
+	}
+
+	return sb.String()
+}
+
+
+// FormatMyIDMessage memformat pesan untuk perintah /myid.
+func FormatMyIDMessage(userID int64) string {
+	return fmt.Sprintf("ID Telegram Anda adalah: `%d`", userID)
+}
+
+// FormatLogMessage memformat output log agar mudah dibaca dalam blok kode.
+func FormatLogMessage(title, content string) string {
+	if strings.TrimSpace(content) == "" {
+		content = "Tidak ada data untuk ditampilkan."
+	}
+	// Menggunakan triple backtick untuk blok kode dan escape judul
+	return fmt.Sprintf("*%s*\n```\n%s\n```", escape(title), content)
+}
+
+
 func escape(text string) string {
 	replacer := strings.NewReplacer(
 		"_", "\\_", "*", "\\*", "[", "\\[", "]", "\\]", "(", "\\(", ")", "\\)",
