@@ -75,6 +75,18 @@ func (t *telegramNotifier) DetermineFriendlyGatewayName(gatewayName string) stri
 	return gatewayName
 }
 
+func AlarmStateToEmoji(state string) string {
+    switch strings.ToLower(state) {
+    case "major":
+        return "🟨"
+    case "critical":
+        return "🟥"
+    case "timeout":
+        return "🟥"
+    default:
+        return state
+    }
+}
 func (t *telegramNotifier) SendSatnetAlert(report types.GatewayReport) error {
 	if len(report.Satnets) == 0 {
 		return nil
@@ -265,10 +277,13 @@ func (t *telegramNotifier) SendModemDownAlert(alerts []types.ModemDownAlert, dev
 			alarmState = alert.AlarmState
 		}
 
+		emoji := AlarmStateToEmoji(alarmState)
+
 		info := fmt.Sprintf(
-			"  🟥 *DEVICE:* %s\n"+
+			"  %s *DEVICE:* %s\n"+
 				"   ├─ *ALARM STATE :* %s\n"+
 				"   └─ *Start :* %s\n\n",
+			escapeMarkdownV2(emoji),
 			escapeMarkdownV2(alert.DeviceName),
 			escapeMarkdownV2(alarmState),
 			escapeMarkdownV2(startTime),

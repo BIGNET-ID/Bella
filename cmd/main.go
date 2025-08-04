@@ -2,8 +2,9 @@ package main
 
 import (
 	configs "bella/config"
+	"bella/api"
 	"bella/db"
-	"bella/internal/bot"
+	"bella/bot"
 	"bella/internal/logger"
 	"bella/internal/notifier"
 	"bella/internal/prtgn"
@@ -27,6 +28,12 @@ func main() {
 	allConnections := db.InitializeDatabases(config)
 	defer allConnections.CloseAll()
 
+	apiClient := api.NewAPIClient(config.G1kURL, config.APIEmail, config.APIPassword)
+	err := apiClient.Login()
+	if err != nil {
+		slog.Error("Koneksi atau login awal ke API gagal.", "error", err.Error())
+	}
+
 	stateManager := state.NewManager("logs/active_alerts.json")
 	telegramNotifier := notifier.NewTelegramNotifier(config.TelegramToken, config.TelegramChatID)
 
@@ -43,7 +50,7 @@ func main() {
 		slog.Warn("Tidak ada tugas cron yang didaftarkan.")
 	}
 
-	botHandler, err := bot.NewBotHandler(config)
+	botHandler, err := bot.NewBotHandler(config, apiClient)
 	if err != nil {
 		slog.Error("Gagal membuat bot handler", "error", err)
 		os.Exit(1)
