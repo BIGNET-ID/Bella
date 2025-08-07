@@ -77,16 +77,19 @@ func (t *telegramNotifier) DetermineFriendlyGatewayName(gatewayName string) stri
 
 func AlarmStateToEmoji(state string) string {
     switch strings.ToLower(state) {
+	case "minor":
+		return "🐤"
     case "major":
-        return "🟨"
+        return "🙉"
     case "critical":
-        return "🟥"
+        return "🐶"
     case "timeout":
-        return "🟥"
+        return "🐷"
     default:
         return state
     }
 }
+
 func (t *telegramNotifier) SendSatnetAlert(report types.GatewayReport) error {
 	if len(report.Satnets) == 0 {
 		return nil
@@ -95,8 +98,8 @@ func (t *telegramNotifier) SendSatnetAlert(report types.GatewayReport) error {
 	var messageBuilder strings.Builder
 	friendlyGatewayName := t.DetermineFriendlyGatewayName(report.FriendlyName)
 
-	alertTitle := "🔴 *CRITICAL ALERT*"
-	eventLine := fmt.Sprintf("🍎 *EVENT:* %d SATNETS DOWN", len(report.Satnets))
+	alertTitle := "🚨 *CRITICAL ALERT*"
+	eventLine := fmt.Sprintf("➤ *EVENT:* %d SATNETS DOWN", len(report.Satnets))
 	gatewayLine := fmt.Sprintf("🔰 *GATEWAY:* %s", escapeMarkdownV2(friendlyGatewayName))
 	header := fmt.Sprintf("%s\n\n%s\n%s\n%s\n\n",
 		alertTitle,
@@ -157,7 +160,7 @@ func (t *telegramNotifier) SendSatnetUpAlert(alerts []types.SatnetUpAlert) error
 	friendlyGatewayName := t.DetermineFriendlyGatewayName(alerts[0].GatewayName)
 
 	title := "🟢 *RECOVERY INFO*"
-	eventLine := fmt.Sprintf("🍏 *EVENT:* %d SATNETS UP", len(alerts))
+	eventLine := fmt.Sprintf("➤ *EVENT:* %d SATNETS UP", len(alerts))
 	gatewayLine := fmt.Sprintf("🔰 *GATEWAY:* %s", escapeMarkdownV2(friendlyGatewayName))
 	header := fmt.Sprintf("%s\n\n%s\n%s\n%s\n\n",
 		title,
@@ -182,8 +185,8 @@ func (t *telegramNotifier) SendSatnetUpAlert(alerts []types.SatnetUpAlert) error
 func (t *telegramNotifier) SendPrtgTrafficDownAlert(traffic types.PRTGDownAlert) error {
 	var messageBuilder strings.Builder
 
-	alertTitle := "🔴 *CRITICAL ALERT*"
-	eventLine := "🍎 *EVENT:* IPTX TRAFFIC LOW"
+	alertTitle := "🚨 *CRITICAL ALERT*"
+	eventLine := "➤ *EVENT:* IPTX TRAFFIC LOW"
 	gatewayLine := fmt.Sprintf("🔰 *GATEWAY:* %s", escapeMarkdownV2(traffic.Location))
 	separator := escapeMarkdownV2("───────────────")
 
@@ -209,8 +212,8 @@ func (t *telegramNotifier) SendPrtgTrafficDownAlert(traffic types.PRTGDownAlert)
 func (t *telegramNotifier) SendPrtgNIFDownAlert(nif types.PRTGDownAlert) error {
 	var messageBuilder strings.Builder
 
-	alertTitle := "🔴 *CRITICAL ALERT*"
-	eventLine := "🍎 *EVENT:* NIF TRAFFIC LOW"
+	alertTitle := "🚨 *CRITICAL ALERT*"
+	eventLine := "➤ *EVENT:* NIF TRAFFIC LOW"
 	gatewayLine := fmt.Sprintf("🔰 *GATEWAY:* %s", escapeMarkdownV2(nif.Location))
 	separator := escapeMarkdownV2("───────────────")
 
@@ -237,7 +240,7 @@ func (t *telegramNotifier) SendPrtgUpAlert(alert types.PRTGUpAlert) error {
 	var messageBuilder strings.Builder
 
 	title := "🟢 *RECOVERY INFO*"
-	eventType := fmt.Sprintf("🍏 *EVENT:* %s RECOVERED", escapeMarkdownV2(alert.SensorType))
+	eventType := fmt.Sprintf("➤ *EVENT:* %s RECOVERED", escapeMarkdownV2(alert.SensorType))
 	gatewayLine := fmt.Sprintf("🔰 *GATEWAY:* %s", escapeMarkdownV2(alert.Location))
 	separator := escapeMarkdownV2("───────────────")
 
@@ -263,8 +266,8 @@ func (t *telegramNotifier) SendModemDownAlert(alerts []types.ModemDownAlert, dev
 	friendlyGatewayName := t.DetermineFriendlyGatewayName(alerts[0].GatewayName)
 	deviceTypeUpper := strings.ToUpper(deviceType) + "S"
 
-	alertTitle := "🔴 *CRITICAL ALERT*"
-	eventLine := fmt.Sprintf("🍎 *EVENT:* %d %s DOWN", len(alerts), escapeMarkdownV2(deviceTypeUpper))
+	alertTitle := "🔴 *ALARM ALERT*"
+	eventLine := fmt.Sprintf("➤ *EVENT:* %d %s DOWN", len(alerts), escapeMarkdownV2(deviceTypeUpper))
 	gatewayLine := fmt.Sprintf("🔰 *GATEWAY:* %s", escapeMarkdownV2(friendlyGatewayName))
 	header := fmt.Sprintf("%s\n\n%s\n%s\n%s\n\n", alertTitle, eventLine, gatewayLine, escapeMarkdownV2("───────────────"))
 	messageBuilder.WriteString(header)
@@ -280,7 +283,7 @@ func (t *telegramNotifier) SendModemDownAlert(alerts []types.ModemDownAlert, dev
 		emoji := AlarmStateToEmoji(alarmState)
 
 		info := fmt.Sprintf(
-			"  %s *DEVICE:* %s\n"+
+			"  %s *DEVICE:* `%s`\n"+
 				"   ├─ *ALARM STATE :* %s\n"+
 				"   └─ *Start :* %s\n\n",
 			escapeMarkdownV2(emoji),
@@ -303,7 +306,7 @@ func (t *telegramNotifier) SendModemUpAlert(alerts []types.ModemUpAlert, deviceT
 	deviceTypeUpper := strings.ToUpper(deviceType) + "S"
 
 	title := "🟢 *RECOVERY INFO*"
-	eventLine := fmt.Sprintf("🍏 *EVENT:* %d %s UP", len(alerts), escapeMarkdownV2(deviceTypeUpper))
+	eventLine := fmt.Sprintf("➤ *EVENT:* %d %s UP", len(alerts), escapeMarkdownV2(deviceTypeUpper))
 	gatewayLine := fmt.Sprintf("🔰 *GATEWAY:* %s", escapeMarkdownV2(friendlyGatewayName))
 	header := fmt.Sprintf("%s\n\n%s\n%s\n%s\n\n", title, eventLine, gatewayLine, escapeMarkdownV2("───────────────"))
 	messageBuilder.WriteString(header)
@@ -311,7 +314,7 @@ func (t *telegramNotifier) SendModemUpAlert(alerts []types.ModemUpAlert, deviceT
 	for _, alert := range alerts {
 		recoveryTime := alert.RecoveryTime.Format("2006-01-02 15:04:05 WIB")
 		info := fmt.Sprintf(
-			"  🟩 *DEVICE:* %s\n"+
+			"  🟩 *DEVICE:* `%s`\n"+
 				"   └─ *RECOVERED AT:* %s\n\n",
 			escapeMarkdownV2(alert.DeviceName),
 			escapeMarkdownV2(recoveryTime),
