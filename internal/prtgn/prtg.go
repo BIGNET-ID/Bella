@@ -130,12 +130,29 @@ func (p *PRTGAPI) checkSensorAndNotify(location, id, sensorType string, previous
 		}
 	} else if wasPreviouslyDown {
 		slog.Info("Sensor PRTG terdeteksi PULIH", "key", alertKey)
+
+		lastDownTime := time.Time{}
+		if previousAlert, ok := p.State.GetAlertByKey(alertKey); ok {
+			if detailsMap, ok := previousAlert.Details.(map[string]interface{}); ok {
+				if lastDownStr, ok := detailsMap["last_down"].(string); ok {
+					const layout = "2006-01-02 15:04:05 MST"
+					parsed, err := time.Parse(layout, lastDownStr)
+					if err == nil {
+						lastDownTime = parsed
+					} else {
+						slog.Warn("Gagal parse LastDown dari state", "last_down", lastDownStr, "error", err)
+					}
+				}
+			}
+		}
+
 		upAlert := types.PRTGUpAlert{
 			Location:       p.Notifier.DetermineFriendlyGatewayName(location),
 			SensorFullName: sensorData.Name,
 			DeviceName:     sensorData.ParentDeviceName,
 			SensorType:     sensorType,
 			RecoveryTime:   time.Now().In(p.Timezone),
+			LastDown:       lastDownTime,
 		}
 		if err := p.Notifier.SendPrtgUpAlert(upAlert); err != nil {
 			slog.Error("Gagal mengirim notifikasi pemulihan PRTG", "key", alertKey, "error", err)
@@ -145,6 +162,12 @@ func (p *PRTGAPI) checkSensorAndNotify(location, id, sensorType string, previous
 }
 
 func (p *PRTGAPI) createDownAlert(location, sensorType string, sensorData SensorData, value string) types.PRTGDownAlert {
+	lastDown := p.convertOAtoTime(sensorData.LastDown)
+
+	if sensorType == "IPTX" && (lastDown == "-" || lastDown == "") {
+		lastDown = time.Now().In(p.Timezone).Format("2006-01-02 15:04:05 WIB")
+	}
+
 	return types.PRTGDownAlert{
 		Location:       p.Notifier.DetermineFriendlyGatewayName(location),
 		SensorFullName: sensorData.Name,
@@ -155,7 +178,7 @@ func (p *PRTGAPI) createDownAlert(location, sensorType string, sensorData Sensor
 		LastMessage:    sensorData.LastMessage,
 		LastCheck:      p.convertOAtoTime(sensorData.LastCheck),
 		LastUp:         p.convertOAtoTime(sensorData.LastUp),
-		LastDown:       p.convertOAtoTime(sensorData.LastDown),
+		LastDown:       lastDown,
 	}
 }
 func (p *PRTGAPI) sendDownAlert(alertData types.PRTGDownAlert) {

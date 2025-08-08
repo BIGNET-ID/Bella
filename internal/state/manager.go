@@ -84,3 +84,12 @@ func (m *Manager) RemoveAlertByKey(key string) {
 		}
 	}
 }
+
+
+func (m *Manager) GetAlertByKey(key string) (ActiveAlert, bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	alert, exists := m.activeAlerts[key]
+	return alert, exists
+}

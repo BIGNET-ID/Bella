@@ -21,6 +21,7 @@ type SatnetUpAlert struct {
 	GatewayName  string
 	SatnetName   string
 	RecoveryTime time.Time
+	TimeDown     time.Time
 }
 
 type ModemDownAlert struct {
@@ -34,6 +35,7 @@ type ModemUpAlert struct {
 	GatewayName  string
 	DeviceName   string
 	RecoveryTime time.Time
+	TimeDown     time.Time
 }
 
 type PRTGDownAlert struct {
@@ -55,5 +57,5 @@ type PRTGUpAlert struct {
 	DeviceName     string    `json:"device_name"`
 	SensorType     string    `json:"sensor_type"`
 	RecoveryTime   time.Time `json:"recovery_time"`
+	LastDown       time.Time `json:"last_down"`
 }
-
