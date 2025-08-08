@@ -35,7 +35,7 @@ func RegisterServices(allConnections *db.Connections, notifier notifier.Notifier
 
 func RegisterCronJobs(scheduler *cron.Cron, config *config.AppConfig, serviceMap map[string]*satnet.Service, prtgAPI prtgn.PRTGAPIInterface, allConnections *db.Connections, notifier notifier.Notifier, stateMgr *state.Manager) {
 	slog.Info("Mendaftarkan tugas-tugas cron...")
-	
+
 	for name, service := range serviceMap {
 		svc := service
 		scheduler.AddFunc(config.CronSchedule, svc.CheckAndAlert)
@@ -46,7 +46,6 @@ func RegisterCronJobs(scheduler *cron.Cron, config *config.AppConfig, serviceMap
 		scheduler.AddFunc(config.CronSchedule, prtgAPI.RunPeriodicChecks)
 		slog.Info("Tugas cron untuk Pengecekan PRTG (NIF & IPTX) berhasil didaftarkan.")
 	}
-
 
 	dbOneMap := map[string]*gorm.DB{
 		"JAYAPURA":  allConnections.DBOneJYP,

@@ -36,6 +36,21 @@ func NewService(dbFive *gorm.DB, notifier notifier.Notifier, stateMgr *state.Man
 	}
 }
 
+func ParseStringToWIB(timeStr string) (time.Time, error) {
+	if timeStr == "" {
+		return time.Now(), nil
+	}
+	const layout = "2006-01-02T15:04:05"
+	loc, err := time.LoadLocation("Asia/Jakarta")
+	if err != nil {
+		return time.Time{}, err
+	}
+	if len(timeStr) < 19 {
+		return time.Time{}, fmt.Errorf("string waktu tidak valid: %s", timeStr)
+	}
+	return time.ParseInLocation(layout, timeStr[:19], loc)
+}
+
 func (s *Service) CheckAndAlert() {
 	slog.Info("Cron job terpicu, memulai pengecekan Satnet...", "gateway", s.name)
 
@@ -70,23 +85,40 @@ func (s *Service) CheckAndAlert() {
 			})
 		}
 	}
-	
-	recoveredSatnets := []types.SatnetUpAlert{}
-	prefix := fmt.Sprintf("satnet_%s_", s.name)
-	for key := range previousAlerts {
-		if strings.HasPrefix(key, prefix) {
-			satnetName := strings.TrimPrefix(key, prefix)
-			if _, stillDown := currentDownMap[satnetName]; !stillDown {
-				slog.Info("Satnet terdeteksi PULIH", "gateway", s.name, "satnet", satnetName)
-				recoveredSatnets = append(recoveredSatnets, types.SatnetUpAlert{
-					GatewayName:  s.name,
-					SatnetName:   satnetName,
-					RecoveryTime: time.Now(),
-				})
-				s.state.RemoveAlertByKey(key)
-			}
-		}
-	}
+
+	var recoveredSatnets []types.SatnetUpAlert
+    prefix := fmt.Sprintf("satnet_%s_", s.name)
+    for key, alert := range previousAlerts {
+        if !strings.HasPrefix(key, prefix) {
+            continue
+        }
+        satnetName := strings.TrimPrefix(key, prefix)
+        if _, stillDown := currentDownMap[satnetName]; stillDown {
+            continue
+        }
+
+        m, ok := alert.Details.(map[string]interface{})
+        if !ok {
+            slog.Warn("Details bukan map[string]interface{}", "key", key)
+            continue
+        }
+        rawStart, _ := m["start_issue"].(string)
+        tStart, err := ParseStringToWIB(rawStart)
+        if err != nil {
+            slog.Warn("Gagal parse start_issue, gunakan time.Now()", "raw", rawStart, "err", err)
+            tStart = time.Now()
+        }
+
+        slog.Info("Satnet terdeteksi PULIH", "gateway", s.name, "satnet", satnetName)
+        recoveredSatnets = append(recoveredSatnets, types.SatnetUpAlert{
+            GatewayName:  s.name,
+            SatnetName:   satnetName,
+            RecoveryTime: time.Now(),
+            TimeDown:     tStart,
+        })
+
+        s.state.RemoveAlertByKey(key)
+    }
 	if len(recoveredSatnets) > 0 {
 		if err := s.notifier.SendSatnetUpAlert(recoveredSatnets); err != nil {
 			slog.Error("Gagal mengirim notifikasi Satnet UP", "gateway", s.name, "error", err)

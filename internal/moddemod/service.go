@@ -28,6 +28,24 @@ func NewService(dbOne *gorm.DB, notifier notifier.Notifier, stateMgr *state.Mana
 	}
 }
 
+func ParseWIBTimestamp(timeStr string) (time.Time, error) {
+	if timeStr == "" {
+		return time.Now(), nil
+	}
+	const layout = "2006-01-02T15:04:05"
+
+	loc, err := time.LoadLocation("Asia/Jakarta")
+	if err != nil {
+		return time.Time{}, err
+	}
+
+	if len(timeStr) < 19 {
+		return time.Time{}, fmt.Errorf("string waktu tidak valid: %s", timeStr)
+	}
+
+	return time.ParseInLocation(layout, timeStr[:19], loc)
+}
+
 func (s *Service) CheckAndAlert() {
 	slog.Info("Cron job terpicu, memulai pengecekan Modulator/Demodulator...", "gateway", s.name)
 	s.checkDevices("modulator")
@@ -85,20 +103,46 @@ func (s *Service) checkDevices(deviceType string) {
 
 	recoveredAlerts := []types.ModemUpAlert{}
 	prefix := fmt.Sprintf("%s_%s_", deviceType, s.name)
-	for key := range previousAlerts {
+
+	for key, alertData := range previousAlerts {
 		if strings.HasPrefix(key, prefix) {
 			deviceName := strings.TrimPrefix(key, prefix)
 			if _, stillDown := currentDownMap[deviceName]; !stillDown {
+
+				var downTime time.Time
+
+				if detailsMap, ok := alertData.Details.(map[string]interface{}); ok {
+					if updatedAtStr, ok := detailsMap["UpdatedAt"].(string); ok {
+
+						parsedTime, err := ParseWIBTimestamp(updatedAtStr)
+						if err != nil {
+							slog.Error("Gagal parsing 'UpdatedAt' untuk modem pulih", "key", key, "error", err)
+							downTime = time.Now()
+						} else {
+							downTime = parsedTime
+						}
+					} else {
+						slog.Warn("Field 'UpdatedAt' tidak ditemukan atau bukan string", "key", key)
+						downTime = time.Now()
+					}
+				} else {
+					slog.Warn("Format 'Details' tidak terduga untuk modem pulih", "key", key)
+					downTime = time.Now()
+				}
+
 				slog.Info("Perangkat terdeteksi PULIH", "gateway", s.name, "type", deviceType, "device", deviceName)
+
 				recoveredAlerts = append(recoveredAlerts, types.ModemUpAlert{
 					GatewayName:  s.name,
 					DeviceName:   deviceName,
 					RecoveryTime: time.Now(),
+					TimeDown:     downTime,
 				})
 				s.state.RemoveAlertByKey(key)
 			}
 		}
 	}
+
 	if len(recoveredAlerts) > 0 {
 		if err := s.notifier.SendModemUpAlert(recoveredAlerts, deviceType); err != nil {
 			slog.Error("Gagal mengirim notifikasi UP", "gateway", s.name, "type", deviceType, "error", err)
